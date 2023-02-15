@@ -1,0 +1,583 @@
+#include "Agreement.h"
+#include "stm32f4xx_hal_usart.h"
+#include "flash.h"
+#include "bsp_BDCMotor.h"
+static void ProtectRight();
+static void Agreement_fun3();
+static void Agreement_funEF();
+static void Agreement_funF2();
+ void Startagreement();
+//void ReturnError1();
+ void QuickRead();
+static void ReturnRight(); 
+uint8_t CheckSum(uint8_t *Ptr,uint8_t Num );
+uint8_t reflag;
+uint16_t count=0;
+uint8_t aRxBuffer1[1000]={0};
+uint8_t SendBuf[1000]={0};
+__IO uint8_t SendBuf1[4]={0};   //正确返回指令发送区域
+	__IO uint8_t SendBuf2[5]={0}; 
+	__IO uint8_t SendBuf3[4]={0}; 
+UART_HandleTypeDef husart_debug;
+MSG_TypeDef Msg;
+u8 txflag=0;
+ uint8_t arr[1000]={0};     //接收到的数据
+ void FlashRight();
+/* 扩展变量 ------------------------------------------------------------------*/
+/* 私有函数原形 --------------------------------------------------------------*/
+/* 函数体 --------------------------------------------------------------------*/
+
+/**
+  * 函数功能: 串口硬件初始化配置
+  * 输入参数: huart：串口句柄类型指针
+  * 返 回 值: 无
+  * 说    明: 该函数被HAL库内部调用
+  */
+
+
+/**
+  * 函数功能: 串口硬件反初始化配置
+  * 输入参数: huart：串口句柄类型指针
+  * 返 回 值: 无
+  * 说    明: 该函数被HAL库内部调用
+  */
+
+
+/**
+  * 函数功能: 串口参数配置.
+  * 输入参数: 无
+  * 返 回 值: 无
+  * 说    明：无
+  */
+	
+	
+
+	long *test1,*test2,*test3,*test4,*test5,*test6;
+	 uint8_t arr1[1000]={0}; 
+	 int32_t test[500]={0};
+	 
+const PARAMETER_TABLE  PARAMETER[] =	 
+{ \
+	{0,1000,WR,NOFLASH,(long*)&test[0]},
+	{1,1000,WR,NOFLASH,(long*)&test[1]},	//电机0使能
+	{2,1001,WR,NOFLASH,(long*)&test[2]},	//电机1使能
+	{3,1002,WR,NOFLASH,(long*)&MotorControl[2].Motor_Start_Stop},	//电机2使能
+	{4,1003,WR,NOFLASH,(long*)&MotorControl[3].Motor_Start_Stop},  //电机3使能
+	{5,1004,WR,NOFLASH,(long*)&MotorControl[4].Motor_Start_Stop},  //电机4使能
+	{6,1005,WR,NOFLASH,(long*)&MotorControl[5].Motor_Start_Stop},  //电机5使能
+	{7,1006,WR,NOFLASH,(long*)&MotorControl[6].Motor_Start_Stop},  //电机6使能
+	{8,1007,WR,NOFLASH,(long*)&test[8]},  //电机7使能
+	{9,1008,WR,NOFLASH,(long*)&test[9]},  //电机8使能
+//	{10,1009,WR,NOFLASH,(long*)&test[10]}, //电机9使能 
+	{10,1009,WR,NOFLASH,(long*)&MotorControl[9].Motor_Start_Stop}, //电机9使能
+	{11,1010,WR,NOFLASH,(long*)&MotorControl[10].Motor_Start_Stop}, //电机10使能
+	{12,1011,WR,NOFLASH,(long*)&MotorControl[11].Motor_Start_Stop}, //电机11使能
+	{13,1012,WR,NOFLASH,(long*)&test[13]}, //电机12使能
+	{14,1013,WR,NOFLASH,(long*)&test[14]}, //电机13使能
+	{15,1014,WR,NOFLASH,(long*)&test[15]}, //电机0PWM
+	{16,1015,WR,NOFLASH,(long*)&test[16]},	 //1PWM
+	{17,1016,WR,NOFLASH,(long*)&MotorControl[2].PWM_DutySet},	 //2PWM，加了位置环，无法通过dutyset控制
+	{18,1017,WR,NOFLASH,(long*)&MotorControl[3].PWM_DutySet},	 //3PWM
+	{19,1018,WR,NOFLASH,(long*)&MotorControl[4].PWM_DutySet},  //4PWM
+	{20,1019,WR,NOFLASH,(long*)&MotorControl[5].PWM_DutySet},  //5PWM
+	{21,1020,WR,NOFLASH,(long*)&MotorControl[6].PWM_DutySet},  //6PWM
+	{22,1021,WR,NOFLASH,(long*)&test[22]},  //7PWM
+	{23,1022,WR,NOFLASH,(long*)&test[23]},  //8PWM
+	{24,1023,WR,NOFLASH,(long*)&MotorControl[9].PWM_DutySet},  //9PWM
+	{25,1024,WR,NOFLASH,(long*)&MotorControl[10].PWM_DutySet},  //10PWM
+	{26,1025,WR,NOFLASH,(long*)&MotorControl[11].PWM_DutySet},  //11PWM
+	{27,1026,WR,NOFLASH,(long*)&test[27]},  //无刷速度给定1
+	{28,1027,WR,NOFLASH,(long*)&test[28]},  //无刷速度给定2
+	{29,1028,WR,NOFLASH,(long*)&test[29]},  //无刷1速度参考
+	{30,1029,WR,NOFLASH,(long*)&test[30]},  //无刷2速度参考
+	{31,1030,OR,NOFLASH,(long*)&test[31]},  //无刷1速度偏差
+	
+	{32,1031,OR,NOFLASH,(long*)&test[32]},	 //无刷2速度偏差
+	{33,1032,OR,NOFLASH,(long*)&test[33]},	 //无刷1实际速度
+	{34,1033,OR,NOFLASH,(long*)&test[34]},	 //无刷2实际速度
+	{35,1034,OR,NOFLASH,(long*)&test[35]},  //风机1实际速度
+	{36,1035,OR,NOFLASH,(long*)&test[36]},  //边刷实际速度
+	{37,1036,WR,YSFLASH,(long*)&test[37]},  //无刷1最大速度限制
+	{38,1037,WR,YSFLASH,(long*)&test[38]},  //无刷2最大速度限制
+	{39,1038,OR,NOFLASH,(long*)&test[39]},  //电机0实际位置
+	{40,1039,OR,NOFLASH,(long*)&test[40]},  //电机1实际位置
+	{41,1040,OR,NOFLASH,(long*)&MotorControl[2].Location_Set},  //电机2实际位置
+	{42,1041,OR,NOFLASH,(long*)&test[42]},  //电机3实际位置
+	{43,1042,OR,NOFLASH,(long*)&test[43]},  //电机4实际位置
+	{44,1043,OR,NOFLASH,(long*)&test[44]},  //电机0电流
+	{45,1044,OR,NOFLASH,(long*)&test[45]},  //电机1电流
+//	{46,1045,OR,NOFLASH,(long*)&test[46]},  //电机2电流
+	{46,1045,OR,NOFLASH,(long*)&MotorControl[9].Current.FilterValue},  //电机2电流
+	{47,1046,OR,NOFLASH,(long*)&test[47]},  //电机3电流
+	  
+	{48,1047,OR,NOFLASH,(long*)&test[48]},	 //电机4电流
+	{49,1048,OR,NOFLASH,(long*)&test[49]},	 //电机5电流
+	{50,1049,OR,NOFLASH,(long*)&test[50]},	 //电机6电流
+	{51,1050,OR,NOFLASH,(long*)&test[51]},  //电机7电流
+	{52,1051,WR,YSFLASH,(long*)&test[52]},  //无刷1极对数
+	{53,1052,WR,YSFLASH,(long*)&test[53]},  //无刷2极对数
+	{54,1053,WR,NOFLASH,(long*)&test[54]},  //无刷1运行方向
+	{55,1054,WR,NOFLASH,(long*)&test[55]},  //无刷2运行方向
+	{56,1055,WR,YSFLASH,(long*)&test[56]},  //电机0加速度
+	{57,1056,WR,YSFLASH,(long*)&test[57]},  //电机1加速度
+	{58,1057,WR,YSFLASH,(long*)&test[58]},  //电机2加速度
+	{59,1058,WR,YSFLASH,(long*)&test[59]},  //电机3加速度
+	{60,1059,WR,YSFLASH,(long*)&test[60]},  //电机4加速度
+	{61,1060,WR,YSFLASH,(long*)&test[61]},  //电机5加速度
+	{62,1061,WR,YSFLASH,(long*)&test[62]},  //6加速度
+	{63,1062,WR,YSFLASH,(long*)&test[63]},  //7加速度
+	
+	{64,1063,WR,YSFLASH,(long*)&test[64]},	 //8加速度
+	{65,1064,WR,YSFLASH,(long*)&test[65]},	 //9加速度
+	{66,1065,WR,YSFLASH,(long*)&test[66]},	 //10加速度
+	{67,1066,WR,YSFLASH,(long*)&test[67]},  //11加速度
+	{68,1067,WR,YSFLASH,(long*)&test[68]},  //12加速度
+	{69,1068,WR,YSFLASH,(long*)&test[69]},  //13加速度
+	{70,1069,WR,YSFLASH,(long*)&test[70]},  //0减速度
+	{71,1070,WR,YSFLASH,(long*)&test[71]},  //1减速度
+	{72,1071,WR,YSFLASH,(long*)&test[72]},  //2减速度
+	{73,1072,WR,YSFLASH,(long*)&test[73]},  //3减速度
+	{74,1073,WR,YSFLASH,(long*)&test[74]},  //4减速度
+	{75,1074,WR,YSFLASH,(long*)&test[75]},  //5减速度
+	{76,1075,WR,YSFLASH,(long*)&test[76]},  //6减速度
+	{77,1076,WR,YSFLASH,(long*)&test[77]},  //7减速度
+	{78,1077,WR,YSFLASH,(long*)&test[78]},  //8减速度
+	{79,1078,WR,YSFLASH,(long*)&test[79]},  //9减速度
+	
+	{80,1079,WR,YSFLASH,(long*)&test[80]},	 //10减速度
+	{81,1080,WR,YSFLASH,(long*)&test[81]},	 //11减速度
+	{82,1081,WR,YSFLASH,(long*)&test[82]},	 //12减速度
+	{83,1082,WR,YSFLASH,(long*)&test[83]},  //13减速度
+	{84,1083,WR,NOFLASH,(long*)&test[84]},  //0错误标记
+	{85,1084,WR,NOFLASH,(long*)&test[85]},  //1错误标记
+	{86,1085,WR,NOFLASH,(long*)&test[86]},  //2错误标记
+	{87,1086,WR,NOFLASH,(long*)&test[87]},  //3错误标记
+	{88,1087,WR,NOFLASH,(long*)&test[88]},  //4错误标记
+	{89,1088,WR,NOFLASH,(long*)&test[89]},  //5错误标记
+	{90,1089,WR,NOFLASH,(long*)&test[90]},  //6错误标记
+	{91,1090,WR,NOFLASH,(long*)&test[91]},  //7错误标记
+	{92,1091,WR,NOFLASH,(long*)&test[92]},  //8错误标记
+	{93,1092,WR,NOFLASH,(long*)&test[93]},  //9错误标记
+	{94,1093,WR,NOFLASH,(long*)&test[94]},  //10错误标记
+	{95,1094,WR,NOFLASH,(long*)&test[95]},  //11错误标记
+	
+	{96,1095,WR,NOFLASH,(long*)&test[96]},	 //12错误标记
+	{97,1096,WR,NOFLASH,(long*)&test[97]},	 //13错误标记
+	{98,1097,OR,NOFLASH,(long*)&test[98]},	 //无刷0温度
+	{99,1098,OR,NOFLASH,(long*)&test[99]},  //无刷1温度
+	{100,1099,OR,NOFLASH,(long*)&test[100]},  //风机温度
+	{101,1100,OR,NOFLASH,(long*)&test[101]},  //母线电压
+	{102,1101,WR,NOFLASH,(long*)&test[102]},  //0刹车信号
+	{103,1102,WR,NOFLASH,(long*)&test[103]},  //1刹车信号
+	{104,1103,WR,NOFLASH,(long*)&test[104]},  //2刹车信号
+	{105,1104,WR,NOFLASH,(long*)&test[105]},  //3刹车信号
+	{106,1105,WR,NOFLASH,(long*)&test[106]},  //4刹车信号
+	{107,1106,WR,NOFLASH,(long*)&test[107]},  //5刹车信号
+	{108,1107,WR,NOFLASH,(long*)&test[108]},  //6刹车信号
+	{109,1108,WR,NOFLASH,(long*)&test[109]},  //7刹车信号
+	{110,1109,WR,NOFLASH,(long*)&test[110]},  //8刹车信号
+	{111,1110,WR,NOFLASH,(long*)&test[111]},  //9刹车信号
+	
+	{112,1111,WR,NOFLASH,(long*)&test[112]},	 //10刹车信号
+	{113,1112,WR,NOFLASH,(long*)&test[113]},		//11刹车信号
+	{114,1113,WR,NOFLASH,(long*)&test[114]},	  //12刹车信号
+	{115,1114,WR,NOFLASH,(long*)&test[115]},    //13刹车信号
+	{116,1115,WR,YSFLASH,(long*)&test[116]},    //电机0kp
+	{117,1116,WR,YSFLASH,(long*)&test[117]},    //电机1kp
+	{118,1117,WR,YSFLASH,(long*)&test[118]},    //电机2kp
+	{119,1118,WR,YSFLASH,(long*)&test[119]},     //电机9kp
+	{120,1119,WR,YSFLASH,(long*)&test[120]},     //电机5kp
+	{121,1120,WR,YSFLASH,(long*)&test[121]},    //电机6kp
+	{122,1121,WR,YSFLASH,(long*)&test[122]},    //电机0ki
+	{123,1122,WR,YSFLASH,(long*)&test[123]},     //电机1ki
+	{124,1123,WR,YSFLASH,(long*)&test[124]},     //2ki
+	{125,1124,WR,YSFLASH,(long*)&test[125]},    //9ki
+	{126,1125,WR,YSFLASH,(long*)&test[126]},    //5ki
+	{127,1126,WR,YSFLASH,(long*)&test[127]},   //6ki
+	
+	{128,1127,WR,YSFLASH,(long*)&test[128]},	 //0kd
+	{129,1128,WR,YSFLASH,(long*)&test[129]},	 //1kd
+	{130,1129,WR,YSFLASH,(long*)&test[130]},	 //2kd
+	{131,1130,WR,YSFLASH,(long*)&test[131]},   //9kd
+	{132,1131,WR,YSFLASH,(long*)&test[132]},   //5kd
+	{133,1132,WR,YSFLASH,(long*)&test[133]},   //6kd
+	{134,1133,WR,YSFLASH,(long*)&test[134]},    //0第一阶段电流限制
+	{135,1134,WR,YSFLASH,(long*)&test[135]},    //1第一阶段电流限制
+	{136,1135,WR,YSFLASH,(long*)&test[136]},    //2第一阶段电流限制
+	{137,1136,WR,YSFLASH,(long*)&test[137]},    //9第一阶段电流限制
+	{138,1137,WR,YSFLASH,(long*)&test[138]},    //3第一阶段电流限制
+	{139,1138,WR,YSFLASH,(long*)&test[139]},    //4第一阶段电流限制
+	{140,1139,WR,YSFLASH,(long*)&test[140]},    //5第一阶段电流限制
+	{141,1140,WR,YSFLASH,(long*)&test[141]},    //6第一阶段电流限制
+	{142,1141,WR,YSFLASH,(long*)&test[142]},    //0第二阶段电流限制
+	{143,1142,WR,YSFLASH,(long*)&test[143]},    //1第二阶段电流限制
+	
+	{144,1143,WR,YSFLASH,(long*)&test[144]},	   //2第二阶段电流限制
+	{145,1144,WR,YSFLASH,(long*)&test[145]},		//9二阶段电流限制
+	{146,1145,WR,YSFLASH,(long*)&test[146]},	   //3二阶段电流限制
+	{147,1146,WR,YSFLASH,(long*)&test[147]},     //4二阶段电流限制
+	{148,1147,WR,YSFLASH,(long*)&test[148]},     //5二阶段电流限制
+	{149,1148,WR,YSFLASH,(long*)&test[149]},     //6二阶段电流限制
+	{150,1149,WR,YSFLASH,(long*)&test[150]},     //0一阶错误累计
+	{151,1150,WR,YSFLASH,(long*)&test[151]},     //1一阶错误累计
+	{152,1151,WR,YSFLASH,(long*)&test[152]},     //2一阶错误累计
+	{153,1152,WR,YSFLASH,(long*)&test[153]},     //3一阶错误累计
+	{154,1153,WR,YSFLASH,(long*)&test[154]},     //4一阶错误累计
+	{155,1154,WR,YSFLASH,(long*)&test[155]},     //5一阶错误累计
+	{156,1155,WR,YSFLASH,(long*)&test[156]},     //6一阶错误累计
+	{157,1156,WR,YSFLASH,(long*)&test[157]},     //7一阶错误累计
+	{158,1157,WR,YSFLASH,(long*)&test[158]},    //0二阶错误累计
+	{159,1158,WR,YSFLASH,(long*)&test[159]},    //1二阶错误累计
+	
+	{160,1159,WR,YSFLASH,(long*)&test[160]},	   //2二阶阶错误累计
+	{161,1160,WR,YSFLASH,(long*)&test[161]},		 //3二阶阶错误累计
+	{162,1161,WR,YSFLASH,(long*)&test[162]},	   //4二阶阶错误累计
+	{163,1162,WR,YSFLASH,(long*)&test[163]},     //5二阶阶错误累计
+	{164,1163,WR,YSFLASH,(long*)&test[164]},      //6二阶阶错误累计
+	{165,1164,WR,YSFLASH,(long*)&test[165]},       //7二阶阶错误累计
+	{166,1165,OR,NOFLASH,(long*)&test[166]},       //无刷1霍尔当前值
+	{167,1166,OR,NOFLASH,(long*)&test[167]},       //无刷2霍尔当前值
+	{168,1167,OR,YSFLASH,(long*)&test[168]},       //无刷1霍尔学习数组
+	{169,1168,OR,YSFLASH,(long*)&test[169]},       //无刷2霍尔学习数组
+	{170,1169,WR,YSFLASH,(long*)&test[170]},       //无刷1单次换向时间
+	{171,1170,WR,YSFLASH,(long*)&test[171]},       //无刷2单次换向时间
+	{172,1171,WR,YSFLASH,(long*)&test[172]},       //无刷1学习换向次数
+	{173,1172,WR,YSFLASH,(long*)&test[173]},       //无刷2学习换向次数
+	{174,1173,WR,YSFLASH,(long*)&test[174]},       //无刷1学习pwm
+	{175,1174,WR,YSFLASH,(long*)&test[175]},       //无刷2学习pwm
+	
+	{176,1175,WR,NOFLASH,(long*)&test[176]},	     //推杆标定标志 
+	{177,1176,WR,NOFLASH,(long*)&test[177]},		   //全局错误
+	{178,1177,WR,NOFLASH,(long*)&test[178]},	     //运行状态
+	{179,1178,WR,YSFLASH,(long*)&test[179]},       //水泵1频率
+	{180,1179,WR,YSFLASH,(long*)&test[180]},       //水泵2频率
+	{0xB5,1,WR,NOFLASH,(long*)&test[181]},
+	{0xB6,1,WR,NOFLASH,(long*)&test[182]},
+	{0xB7,1,OR,NOFLASH,(long*)&test[183]},
+	{0xB8,1,OR,NOFLASH,(long*)&test[184]},
+	{0xB9,1,OR,NOFLASH,(long*)&test[185]},
+	{0xBA,1,OR,NOFLASH,(long*)&test[186]},
+	{0xBB,1,OR,NOFLASH,(long*)&test[187]},
+	{0xBC,1,OR,NOFLASH,(long*)&test[188]},
+	{0xBD,1,OR,NOFLASH,(long*)&test[189]},
+	{0xBE,1,OR,NOFLASH,(long*)&test[190]},
+	{0xBF,1,OR,NOFLASH,(long*)&test[191]},
+};
+	
+	void MX_USART3_UART_Init(void)
+{
+
+    /* USER CODE BEGIN USART3_Init 0 */
+
+    /* USER CODE END USART3_Init 0 */
+
+    /* USER CODE BEGIN USART3_Init 1 */
+
+    /* USER CODE END USART3_Init 1 */
+    huart3.Instance = USART3;
+    huart3.Init.BaudRate = 115200;
+    huart3.Init.WordLength = UART_WORDLENGTH_8B;
+    huart3.Init.StopBits = UART_STOPBITS_1;
+    huart3.Init.Parity = UART_PARITY_NONE;
+    huart3.Init.Mode = UART_MODE_TX_RX;
+    huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&huart3) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    /* USER CODE BEGIN USART3_Init 2 */
+
+    /* USER CODE END USART3_Init 2 */
+
+}
+
+void DEBUG_USARTx_IRQHandler()                     //新加的串口中断处理函数
+{
+	if(__HAL_USART_GET_FLAG(&huart3,USART_FLAG_RXNE)!= RESET) // 接收中断：接收到数据
+	{
+		uint8_t data;
+		data=READ_REG(huart3.Instance->DR); // 读取数据
+    /*新加的东西*/
+			if(count==0) // 如果是重新接收到数据帧，开启串口空闲中断
+		{
+			__HAL_UART_CLEAR_FLAG(&huart3,USART_FLAG_IDLE); // 清除空闲中断标志
+		  __HAL_UART_ENABLE_IT(&huart3,USART_IT_IDLE);     // 使能空闲中断	    
+		}
+		
+	  aRxBuffer1[count++]=data;//将数据保存在aRxBuffer中	
+  }
+		else	if(__HAL_USART_GET_FLAG(&huart3,USART_FLAG_IDLE)!= RESET) // 串口空闲中断 新加的
+	{
+		__HAL_UART_CLEAR_FLAG(&huart3,USART_FLAG_IDLE); // 清除空闲中断标志
+		__HAL_UART_DISABLE_IT(&huart3,USART_IT_IDLE);    // 关闭空闲中断
+		reflag=1;		                                 // 数据帧置位，标识接收到一个完整数据帧
+		count=0;
+	}
+}
+
+
+void Startagreement()
+{
+	u8 i=0;
+if(reflag==1)             //收到数据啦
+ {
+
+	if(aRxBuffer1[0]==FRAME_START)                          // 判断首位是不是5A
+		{
+			if(aRxBuffer1[1]==0x03)                           //判断功能码//下位机传数据给上位机
+			{ 
+           if(CheckSum((uint8_t*)&aRxBuffer1[0],aRxBuffer1[2]+3)==aRxBuffer1[aRxBuffer1[2]+3])	  //03功能码校验
+					 {				 
+				       Agreement_fun3();
+					 }
+				
+			}
+			
+			if((aRxBuffer1[1]==0xE2) && (aRxBuffer1[2]==0x00)&& (aRxBuffer1[3]==0x3C))
+			{
+				 if(InternalFlash(test,ParaNum)==1)
+         FlashRight();
+			}
+			
+			
+			if(aRxBuffer1[1]==0x06)                           //上位机控制下位机
+			{
+				if(CheckSum((uint8_t*)&aRxBuffer1[0],7)==aRxBuffer1[7])	  //06功能码校验
+			  {
+				 *PARAMETER[aRxBuffer1[2]].lpParam=aRxBuffer1[3]|aRxBuffer1[4]<<8|aRxBuffer1[5]<<16|aRxBuffer1[6]<<24;   
+         ReturnRight();					
+		    }
+	    }
+}
+		reflag=0;
+	}
+}
+
+
+void QuickRead()
+{
+	if(aRxBuffer1[0]==FRAME_START)                          // 判断首位是不是5A
+		{
+			
+			if(aRxBuffer1[1]==0xEF)                           //判断功能码//下位机传数据给上位机
+			{ 
+				if(CheckSum((uint8_t*)&aRxBuffer1[0],aRxBuffer1[2]+3)==aRxBuffer1[aRxBuffer1[2]+3])	  //校验
+					 { 
+							
+//						 do{
+				        Agreement_funEF();
+//						   }
+//							 while((aRxBuffer1[3]==0x00)&& (aRxBuffer1[4]==0xD7));       //关闭监控
+					 }
+//			 
+      }
+//		if(aRxBuffer1[1]==0xF2) 
+//		  {
+//        if(CheckSum((uint8_t*)&aRxBuffer1[0],4)==aRxBuffer1[4])	  //校验
+//					 { 
+//							
+////						 do{
+//				        Agreement_funF2();
+////						   }
+////							 while((aRxBuffer1[3]==0x00)&& (aRxBuffer1[4]==0xD7));       //关闭监控
+//					 }
+
+//		  }			
+		}
+}
+
+
+
+void Agreement_fun3()         //读寄存器
+{
+	int j;
+	SendBuf[0]=FRAME_START;   //发送数据第一个字节
+	SendBuf[1]=0x03;            //发送数据第二一个字节
+	SendBuf[2]=aRxBuffer1[2];           //发送数据第三个字节
+	for(j=1;j<=aRxBuffer1[2];j++)     //循环发送数据     
+	{
+//		if((aRxBuffer1[3]==0x0F)||(aRxBuffer1[3]==0x10)||(aRxBuffer1[3]==0x11)||(aRxBuffer1[3]==0x12)
+//			||(aRxBuffer1[3]==0x13)||(aRxBuffer1[3]==0x14)||(aRxBuffer1[3]==0x15)||(aRxBuffer1[3]==0x16)
+//		  ||(aRxBuffer1[3]==0x17)||(aRxBuffer1[3]==0x18)||/*(aRxBuffer1[3]==0x19)||*/(aRxBuffer1[3]==0x1A))    //PWM读取
+//		{
+//		SendBuf[4*(j-1)+3]= (*PARAMETER[aRxBuffer1[2+j]].lpParam)&0xFF;              
+//		SendBuf[4*(j-1)+4]= (*PARAMETER[aRxBuffer1[2+j]].lpParam)>>8&0xFF;
+//		SendBuf[4*(j-1)+5]= 0;
+//		SendBuf[4*(j-1)+6]= 0;
+//		}
+//		else
+//			{
+		SendBuf[4*(j-1)+3]= (*PARAMETER[aRxBuffer1[2+j]].lpParam)&0xFF;              
+		SendBuf[4*(j-1)+4]= (*PARAMETER[aRxBuffer1[2+j]].lpParam)>>8&0xFF;
+		SendBuf[4*(j-1)+5]= ((*PARAMETER[aRxBuffer1[2+j]].lpParam)>>16)&0xFF;
+		SendBuf[4*(j-1)+6]= ((*PARAMETER[aRxBuffer1[2+j]].lpParam)>>24);
+//		  }
+//		SendBuf[4*(j-1)+3]= MotorControl[3].PWM_DutySet&0xFF;              
+//		SendBuf[4*(j-1)+4]= (MotorControl[3].PWM_DutySet>>8)&0xFF;
+//		SendBuf[4*(j-1)+5]= (MotorControl[3].PWM_DutySet>>16)&0xFF;
+//		SendBuf[4*(j-1)+6]= (MotorControl[3].PWM_DutySet>>24)&0xFF;
+	}
+		SendBuf[4*aRxBuffer1[2]+3]=CheckSum((uint8_t*)&SendBuf[0],4*aRxBuffer1[2]+3);                                                                             
+	HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf,4*aRxBuffer1[2]+4,1000);   //发送数据给上位机  
+}
+
+
+
+
+
+
+
+
+
+
+
+void Agreement_funEF()         //监控器读寄存器（实时）
+{
+	int j;
+	SendBuf[0]=FRAME_START;   //发送数据第一个字节
+	SendBuf[1]=0xEF;            //发送数据第二一个字节
+	SendBuf[2]=aRxBuffer1[2];           //发送数据第三个字节
+	for(j=1;j<=aRxBuffer1[2];j++)     //循环发送数据     
+	{
+		SendBuf[4*(j-1)+3]=  *PARAMETER[aRxBuffer1[2+j]].lpParam&0xFF;              
+		SendBuf[4*(j-1)+4]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>8)&0xFF;
+		SendBuf[4*(j-1)+5]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>16)&0XFF;
+		SendBuf[4*(j-1)+6]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>24)&0XFF;
+	}
+//   *PARAMETER[44].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+//	 *PARAMETER[45].lpParam=0;
+//	 *PARAMETER[46].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+//	 *PARAMETER[47].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+//   *PARAMETER[48].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+//   *PARAMETER[49].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+//	 *PARAMETER[50].lpParam=0;//电机0电流到电机7电流,检测协议的时候用的
+	   SendBuf[4*aRxBuffer1[2]+3]=CheckSum((uint8_t*)&SendBuf[0],4*aRxBuffer1[2]+3);   //发送CRC校验位
+	   HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf,4*aRxBuffer1[2]+4,500);   //发送数据给上位机(加了校验位，所以为加4)
+}
+
+//void Agreement_funF2()
+//{
+//	int j;
+//	SendBuf[0]=FRAME_START;   //发送数据第一个字节
+//	SendBuf[1]=0xF2;            //发送数据第二一个字节
+//	for(j=1;j<=2;j++)     //循环发送数据     
+//	{
+//		SendBuf[4*(j-1)+2]=  *PARAMETER[aRxBuffer1[2+j]].lpParam&0xFF;              
+//		SendBuf[4*(j-1)+3]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>8)&0xFF;
+//		SendBuf[4*(j-1)+4]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>16)&0XFF;
+//		SendBuf[4*(j-1)+5]= (*PARAMETER[aRxBuffer1[2+j]].lpParam>>24)&0XFF;
+//	}
+//	   SendBuf[10]=CheckSum((uint8_t*)&SendBuf[0],10);   //发送CRC校验位
+//	   HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf,10,500);   //发送数据给上位机(加了校验位，所以为加4)
+//}
+
+
+
+
+
+
+
+
+
+
+void ReturnRight()         //返回正确指令
+{
+	SendBuf1[0]=FRAME_START;   //发送数据第一个字节
+	SendBuf1[1]=0x06;            //发送数据第二一个字节
+	SendBuf1[2]=00;           //发送数据第三个字节
+	SendBuf1[3]=0xF0;
+	HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf1,4,1000);   //发送数据给上位机
+}
+
+
+uint8_t CheckSum(uint8_t *Ptr,uint8_t Num )        //校验数据
+{
+  uint16_t Sum = 0;
+  while(Num--)
+  {
+    Sum += *Ptr;
+    Ptr++;
+  }
+	Sum=Sum%0x100;               //取余		
+  return Sum;
+}
+
+void ReturnError1()
+{
+	
+//	static int flag = 1;
+	static int flag1=1;
+	static int flag2=1;
+//	int i;
+	uint8_t ch[]= {0x5A,0xE1,0xB1,0x06,0x04,0x02,0x01,0xF9};
+	uint8_t ch1[]= {0x5A,0xE1,0x59,0x00,0x00,0x00,0x01,0x95};
+	uint8_t ch2[]= {0x5A,0xE1,0x5A,0x00,0x00,0x00,0x01,0x96};
+//	uint8_t ch1[]={0x5A,0xB1,0x04,0x00,0x00,0x00,0x01,0x10};
+//	uint8_t ch2[]={0x5A,0xB1,0x06,0x01,0x00,0x00,0x01,0x9A};
+//	uint8_t ch3[]={0x5A,0xE1,0x5F,0x00,0x00,0x00,0x01,0x9B};
+//	uint8_t ch4[]={0x5A,0xE1,0x61,0x00,0x00,0x00,0x01,0x9D};
+	uint8_t ch6[]= {0x5A,0xE1,0x5A,0x00,0x00,0x00,0x00,0x95};
+	uint8_t ch5[]= {0x5A,0xE1,0xB1,0x01,0x02,0x08,0x00,0xF7};
+//	HAL_UART_Transmit(&huart3,(uint8_t *)&ch,8,1000);
+	if((txflag ==0x01)&&(flag1==1))
+		
+	{
+//		 HAL_UART_Transmit(&huart3,(uint8_t *)&ch5,8,1000);
+//		   HAL_Delay(200);
+//		 HAL_UART_Transmit(&huart3,(uint8_t *)&ch5,8,1000);
+//		   HAL_Delay(200);
+//		 for(i=1;i<3;i++)
+	     HAL_UART_Transmit(&huart3,(uint8_t *)&ch2,8,1000);
+		   HAL_Delay(200);
+		   HAL_UART_Transmit(&huart3,(uint8_t *)&ch1,8,1000);
+		   HAL_Delay(200);
+		   HAL_UART_Transmit(&huart3,(uint8_t *)&ch2,8,1000);
+		   HAL_Delay(200);
+		   HAL_UART_Transmit(&huart3,(uint8_t *)&ch1,8,1000);
+		    HAL_Delay(200);
+		   flag1=0;
+
+	}
+	else if(txflag ==0x02)
+		    HAL_UART_Transmit(&huart3,(uint8_t *)&ch6,8,1000);
+//		if((aRxBuffer1[0]==0x5A)&&(aRxBuffer1[1]==0xE0)&&flag1==1)
+//		{
+//			 HAL_UART_Transmit(&huart3,(uint8_t *)&ch,8,1000);
+//			flag1=0;
+//		}
+//	HAL_Delay(1000);
+	else if((txflag ==0x03)&&(flag2==1))
+		
+	{
+		 HAL_UART_Transmit(&huart3,(uint8_t *)&ch5,8,1000);
+		   HAL_Delay(200);
+		 HAL_UART_Transmit(&huart3,(uint8_t *)&ch5,8,1000);
+		   HAL_Delay(200);
+		   flag2=0;
+
+	}
+	
+}
+
+
+
+
+void ProtectRight()
+{
+	SendBuf2[0]=FRAME_START;   //发送数据第一个字节
+	SendBuf2[1]=0xE2;            //发送数据第二一个字节
+	SendBuf2[2]=0x01;           //发送数据第三个字节
+	SendBuf2[3]=0x00;
+	SendBuf2[4]=0x3D;
+	HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf2,5,1000);   //发送数据给上位机
+}
+
+void FlashRight()
+{
+	SendBuf3[0]=FRAME_START;   //发送数据第一个字节
+	SendBuf3[1]=0xE2;            //发送数据第二一个字节
+	SendBuf3[2]=0x00;           //发送数据第三个字节
+	SendBuf3[3]=0xF0;
+	HAL_UART_Transmit(&huart3,(uint8_t *)&SendBuf3,4,1000);   //发送数据给上位机
+}
