@@ -1,0 +1,184 @@
+序号,通道,D1,D2,D3,D4,D5,D6,D7,autoscan,MCU,设备类型,设备测试指令,点位,测试值,上限,下限,是否结束,补偿
+1,无,0,0,0,0,0,0,0,无,2,无,关闭所有电压输出,MCU去电,,无,无,N,无
+2,(@501),1,0,0,0,0,0,0,无,1,M300,MEAS:RES? ,工装上电阻MTDC 1K,,1050,950,Y,无
+3,(@501),2,0,0,0,0,0,0,无,1,M300,MEAS:RES? ,H12对H10,,0,10000,Y,无
+4,(@501),3,0,0,0,0,0,0,无,1,M300,MEAS:RES? ,T3,,60,20,Y,无
+5,(@501),4,0,0,0,0,0,0,无,1,M300,MEAS:RES? ,T4,,500,200,Y,无
+6,无,无,无,无,无,无,无,无,无,无,提示,设置稳压电源…，完成后按确定继续测试,无,,无,无,N,无
+7,无,1,0,0,0,0,0,0,无,2,无,为MCU供电D1=1.8 D2=3.3,MCU上电,,无,无,N,无
+8,(@501),3,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,T3,,12.2,11.8,Y,无
+9,(@501),4,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,T4,,3.33,3.28,Y,无
+10,(@501),5,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,T5,,1.23,1.18,Y,无
+11,(@501),6,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP7(r70),,1.35,1.25,Y,无
+12,(@501),7,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP8(r66),,1.35,1.25,Y,无
+13,(@501),8,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP10(r65),,1.35,1.25,Y,无
+14,(@501),9,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP11(r69),,1.35,1.25,Y,无
+15,(@501),10,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP13(r79),,1.35,1.25,Y,无
+16,(@501),11,0,0,0,0,0,0,无,1,M300,MEAS:VOLT:DC? ,TP14(r80),,1.35,1.25,Y,无
+17,无,无,无,无,无,无,无,无,无,无,提示,按要求打开烧录软件…，完成后等待提示进行烧录,无,,无,无,N,无
+18,无,0,0,0,1,0,0,0,无,1,无,FL接通,无,,无,无,N,无
+19,无,无,无,无,无,无,无,无,无,无,提示,请进行烧录，完成后点击确定以关闭继电器，将进行信号测试,无,,无,无,N,无
+20,无,0,0,0,0,0,0,0,无,1,无,FL断开,无,,无,无,N,无
+21,无,无,无,无,无,无,无,无,无,无,提示,请打开示波器进行测试，准备完成后点击确定继续,无,,无,无,N,无
+22,CHANnel1,0,0,0,0,0,10,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-2,,102000,99000,Y,无
+23,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-2,,3.45,3.15,Y,无
+24,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-2,,0.52,0.48,Y,无
+25,CHANnel1,0,0,0,0,0,20,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-3,,102000,99000,Y,无
+26,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-3,,3.45,3.15,Y,无
+27,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-3,,0.52,0.48,Y,无
+28,CHANnel1,0,0,0,0,0,30,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-4,,102000,99000,Y,无
+29,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-4,,3.45,3.15,Y,无
+30,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-4,,0.52,0.48,Y,无
+31,CHANnel1,0,0,0,0,0,40,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-5,,102000,99000,Y,无
+32,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-5,,3.45,3.15,Y,无
+33,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-5,,0.52,0.48,Y,无
+34,CHANnel1,0,0,0,0,0,50,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-6,,102000,99000,Y,无
+35,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-6,,3.45,3.15,Y,无
+36,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-6,,0.52,0.48,Y,无
+37,CHANnel1,0,0,0,0,0,60,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-7,,102000,99000,Y,无
+38,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-7,,3.45,3.15,Y,无
+39,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-7,,0.52,0.48,Y,无
+40,CHANnel1,0,0,0,0,0,70,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-8,,102000,99000,Y,无
+41,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-8,,3.45,3.15,Y,无
+42,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-8,,0.52,0.48,Y,无
+43,CHANnel1,0,0,0,0,0,80,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-9,,102000,99000,Y,无
+44,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-9,,3.45,3.15,Y,无
+45,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-9,,0.52,0.48,Y,无
+46,CHANnel2,0,0,0,0,0,1,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-11,,102000,99000,Y,无
+47,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-11,,3.45,3.15,Y,无
+48,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-11,,0.52,0.48,Y,无
+49,CHANnel2,0,0,0,0,0,2,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-12,,102000,99000,Y,无
+50,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-12,,3.45,3.15,Y,无
+51,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-12,,0.52,0.48,Y,无
+52,CHANnel2,0,0,0,0,0,3,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-13,,102000,99000,Y,无
+53,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-13,,3.45,3.15,Y,无
+54,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-13,,0.52,0.48,Y,无
+55,CHANnel2,0,0,0,0,0,4,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-14,,102000,99000,Y,无
+56,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-14,,3.45,3.15,Y,无
+57,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-14,,0.52,0.48,Y,无
+58,CHANnel2,0,0,0,0,0,5,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-15,,102000,99000,Y,无
+59,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-15,,3.45,3.15,Y,无
+60,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-15,,0.52,0.48,Y,无
+61,CHANnel2,0,0,0,0,0,6,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-16,,102000,99000,Y,无
+62,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-16,,3.45,3.15,Y,无
+63,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-16,,0.52,0.48,Y,无
+64,CHANnel2,0,0,0,0,0,7,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-17,,102000,99000,Y,无
+65,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-17,,3.45,3.15,Y,无
+66,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-17,,0.52,0.48,Y,无
+67,CHANnel2,0,0,0,0,0,8,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-18,,102000,99000,Y,无
+68,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-18,,3.45,3.15,Y,无
+69,CHANnel2,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-18,,0.52,0.48,Y,无
+70,CHANnel3,0,0,0,0,0,0,10,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-19,,102000,99000,Y,无
+71,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-19,,3.45,3.15,Y,无
+72,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-19,,0.52,0.48,Y,无
+73,CHANnel3,0,0,0,0,0,0,20,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-21,,102000,99000,Y,无
+74,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-21,,3.45,3.15,Y,无
+75,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-21,,0.52,0.48,Y,无
+76,CHANnel3,0,0,0,0,0,0,30,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-22,,102000,99000,Y,无
+77,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-22,,3.45,3.15,Y,无
+78,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-22,,0.52,0.48,Y,无
+79,CHANnel3,0,0,0,0,0,0,40,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-23,,102000,99000,Y,无
+80,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-23,,3.45,3.15,Y,无
+81,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-23,,0.52,0.48,Y,无
+82,CHANnel3,0,0,0,0,0,0,50,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-24,,102000,99000,Y,无
+83,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-24,,3.45,3.15,Y,无
+84,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-24,,0.52,0.48,Y,无
+85,CHANnel3,0,0,0,0,0,0,60,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-25,,102000,99000,Y,无
+86,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-25,,3.45,3.15,Y,无
+87,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-25,,0.52,0.48,Y,无
+88,CHANnel3,0,0,0,0,0,0,70,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-26,,102000,99000,Y,无
+89,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-26,,3.45,3.15,Y,无
+90,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-26,,0.52,0.48,Y,无
+91,CHANnel3,0,0,0,0,0,0,80,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J1-27,,102000,99000,Y,无
+92,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J1-27,,3.45,3.15,Y,无
+93,CHANnel3,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J1-27,,0.52,0.48,Y,无
+94,CHANnel4,0,0,0,0,0,0,1,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-15,,102000,99000,Y,无
+95,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-15,,3.45,3.15,Y,无
+96,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-15,,0.52,0.48,Y,无
+97,CHANnel4,0,0,0,0,0,0,2,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-16,,102000,99000,Y,无
+98,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-16,,3.45,3.15,Y,无
+99,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-16,,0.52,0.48,Y,无
+100,CHANnel4,0,0,0,0,0,0,3,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-18,,102000,99000,Y,无
+101,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-18,,3.45,3.15,Y,无
+102,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-18,,0.52,0.48,Y,无
+103,CHANnel4,0,0,0,0,0,0,4,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-19,,102000,99000,Y,无
+104,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-19,,3.45,3.15,Y,无
+105,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-19,,0.52,0.48,Y,无
+106,CHANnel4,0,0,0,0,0,0,5,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-20,,102000,99000,Y,无
+107,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-20,,3.45,3.15,Y,无
+108,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-20,,0.52,0.48,Y,无
+109,CHANnel4,0,0,0,0,0,0,6,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-21,,102000,99000,Y,无
+110,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-21,,3.45,3.15,Y,无
+111,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-21,,0.52,0.48,Y,无
+112,CHANnel4,0,0,0,0,0,0,7,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-22,,102000,99000,Y,无
+113,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-22,,3.45,3.15,Y,无
+114,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-22,,0.52,0.48,Y,无
+115,CHANnel4,0,0,0,0,0,0,8,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-23,,102000,99000,Y,无
+116,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-23,,3.45,3.15,Y,无
+117,CHANnel4,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-23,,0.52,0.48,Y,无
+118,CHANnel1,0,0,10,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-25,,102000,99000,Y,无
+119,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-25,,3.45,3.15,Y,无
+120,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-25,,0.52,0.48,Y,无
+121,CHANnel1,0,0,20,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-27,,102000,99000,Y,无
+122,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-27,,3.45,3.15,Y,无
+123,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-27,,0.52,0.48,Y,无
+124,CHANnel1,0,0,30,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-29,,102000,99000,Y,无
+125,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-29,,3.45,3.15,Y,无
+126,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-29,,0.52,0.48,Y,无
+127,CHANnel1,0,0,40,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-31,,102000,99000,Y,无
+128,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-31,,3.45,3.15,Y,无
+129,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-31,,0.52,0.48,Y,无
+130,CHANnel1,0,0,50,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-33,,102000,99000,Y,无
+131,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-33,,3.45,3.15,Y,无
+132,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-33,,0.52,0.48,Y,无
+133,CHANnel1,0,0,1,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-35,,102000,99000,Y,无
+134,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-35,,3.45,3.15,Y,无
+135,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-35,,0.52,0.48,Y,无
+136,CHANnel1,0,0,2,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-37,,102000,99000,Y,无
+137,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-37,,3.45,3.15,Y,无
+138,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-37,,0.52,0.48,Y,无
+139,CHANnel1,0,0,3,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J2-39,,102000,99000,Y,无
+140,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J2-39,,3.45,3.15,Y,无
+141,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J2-39,,0.52,0.48,Y,无
+142,CHANnel1,0,0,4,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H1,,102000,99000,Y,无
+143,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H1,,3.45,3.15,Y,无
+144,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H1,,0.52,0.48,Y,无
+145,CHANnel1,0,0,5,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H2,,102000,99000,Y,无
+146,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H2,,3.45,3.15,Y,无
+147,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H2,,0.52,0.48,Y,无
+148,CHANnel1,0,0,0,0,10,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H3,,102000,99000,Y,无
+149,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H3,,3.45,3.15,Y,无
+150,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H3,,0.52,0.48,Y,无
+151,CHANnel1,0,0,0,0,20,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H5,,102000,99000,Y,无
+152,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H5,,3.45,3.15,Y,无
+153,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H5,,0.52,0.48,Y,无
+154,CHANnel1,0,0,0,0,30,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H6,,102000,99000,Y,无
+155,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H6,,3.45,3.15,Y,无
+156,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H6,,0.52,0.48,Y,无
+157,CHANnel1,0,0,0,0,40,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H7,,102000,99000,Y,无
+158,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H7,,3.45,3.15,Y,无
+159,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H7,,0.52,0.48,Y,无
+160,CHANnel1,0,0,0,0,1,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,H8,,102000,99000,Y,无
+161,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,H8,,3.45,3.15,Y,无
+162,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,H8,,0.52,0.48,Y,无
+163,CHANnel1,0,0,0,0,2,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN1,,102000,99000,Y,无
+164,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN1,,3.45,3.15,Y,无
+165,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN1,,0.52,0.48,Y,无
+166,CHANnel1,0,0,0,0,3,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN2,,102000,99000,Y,无
+167,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN2,,3.45,3.15,Y,无
+168,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN2,,0.52,0.48,Y,无
+169,CHANnel1,0,0,0,0,4,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN3,,102000,99000,Y,无
+170,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN3,,3.45,3.15,Y,无
+171,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN3,,0.52,0.48,Y,无
+172,CHANnel1,0,3,0,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN5,,102000,99000,Y,无
+173,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN5,,3.45,3.15,Y,无
+174,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN5,,0.52,0.48,Y,无
+175,CHANnel1,0,4,0,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN6,,102000,99000,Y,无
+176,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN6,,3.45,3.15,Y,无
+177,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN6,,0.52,0.48,Y,无
+178,CHANnel1,0,5,0,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN7,,102000,99000,Y,无
+179,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN7,,3.45,3.15,Y,无
+180,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN7,,0.52,0.48,Y,无
+181,CHANnel1,0,6,0,0,0,0,0,AUTOSACLE,1,示波,:MEASure:FREQuency? ,J3 PIN8,,102000,99000,Y,无
+182,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:VPP? ,J3 PIN8,,3.45,3.15,Y,无
+183,CHANnel1,无,无,无,无,无,无,无,无,无,示波,:MEASure:PDUTy?,J3 PIN8,,0.52,0.48,Y,无
