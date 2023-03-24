@@ -1,0 +1,742 @@
+#include "bsp_app_function.h"
+#include "mc_config.h"
+#include "ds402.h"
+#include "mc_config.h "
+extern int32_t Countrer_1ms_CNT,Countrer2_1ms_CNT;
+extern float CurrentPosition1,CurrentPosition2;
+extern uint8_t PositionModeFlag1,PositionModeFlag2;
+extern float TargetPosition1,TargetPosition2;
+extern MCI_Handle_t* pMCI[NBR_OF_MOTORS];
+extern long SetPulseMotor1,SetPulseMotor2,SetPulseMotorM1_M2;
+extern PosCtrl_Handle_t *pPosCtrl[NBR_OF_MOTORS];
+extern MotorParameters_t MotorParameters[NBR_OF_MOTORS];
+/*------------------------------------------------
+Function:
+Input   :No
+Output  :No
+Explain :Modes_of_operation
+					1 位置模式  	默认速度模式
+					3 速度模式
+					4 力矩模式
+------------------------------------------------*/
+u8 modetemp[MAX_AXES];
+u16 CNT_1MS[MAX_AXES];
+u8 P_V_I_Switch_using[MAX_AXES];
+extern u16 Sync_Async_Control;
+long RelativeLocation[MAX_AXES] = {0};
+u8 relative_location_flag[MAX_AXES] = {0};
+void Independent_Motor_Control(void)
+{
+    static long delay_200ms[2]= {200,200};
+    Drive_Data *pCiA402Axis;
+    u16 counter = 0;
+    for(counter = 0; counter < MAX_AXES; counter++)
+    {
+        if(!Driver_Data[counter].device_control_data.bAxisIsActive) //注意赋初值1
+        {
+            continue;
+        }
+        if(Sync_Async_Control == 1)//0：M1和M2异步控制  1：M1和M2同步控制
+        {
+            Driver_Data[M2].device_control_data.Modes_of_operation = Driver_Data[M1].device_control_data.Modes_of_operation; //同步模式下：控制M1电机的控制模式即可！
+            pCtrlPar[M2].SetVelMotor = pCtrlPar[M1].SetVelMotor;
+        }
+        pCiA402Axis = &Driver_Data[counter];
+
+
+        if(pCiA402Axis->device_control_data.Modes_of_operation == 1) //位置模式
+        {
+            if(modetemp[counter] != 1)
+            {
+                modetemp[counter] = 2; //达成case2当中条件，会切换到位置模式
+                P_V_I_Switch_using[counter] = 3;
+            }
+        }
+        else if(pCiA402Axis->device_control_data.Modes_of_operation == 3) //速度模式
+        {
+            if(modetemp[counter] != 3)
+            {
+                modetemp[counter] = 2;//达成case2当中条件，会切换到速度模式
+                P_V_I_Switch_using[counter] = 2; //在case2 当中执行速度环---->位置环
+            }
+        }
+        else if(pCiA402Axis->device_control_data.Modes_of_operation == 4) //力矩模式
+        {
+            if(modetemp[counter]!=4)
+            {
+                if(counter == M1)
+                {
+                    pCtrlPar[M1].SetTorqueMotor = 0;
+                    SpeednTorqCtrlM1.TorqueRef = 0 ;
+                }
+                if(counter == M2)
+                {
+                    pCtrlPar[M2].SetTorqueMotor = 0;
+                    SpeednTorqCtrlM2.TorqueRef = 0 ;
+                }
+            }
+            modetemp[counter] = 4;
+        }
+
+
+        switch(modetemp[counter])
+        {
+        case 0:
+            break;
+            break;
+        case 1 :
+
+            if(counter == M1) //电机1位置环
+            {
+                if(relative_location_flag[counter] == 1) //相对位置模式开关
+                {
+                    if(RelativeLocation[counter] != 0) //每一次给值
+                    {
+                        SetPulseMotor1 = SetPulseMotor1 + RelativeLocation[counter];
+                        RelativeLocation[counter] = 0;
+                    }
+                    pMCI[M1]->pPosCtrl->PositionControlRegulation = 1;  //打开位置控制模式开关
+                    MC_ProgramPositionCommandMotor1( SetPulseMotor1, 0 );
+                }
+                else
+                {
+                    pMCI[M1]->pPosCtrl->PositionControlRegulation = 1;  //打开位置控制模式开关
+                    MC_ProgramPositionCommandMotor1( SetPulseMotor1, 0 );
+                }
+            }
+            else if(counter == M2)//电机2位置环
+            {
+                if(relative_location_flag[counter] == 1) //相对位置模式开关
+                {
+                    if(RelativeLocation[counter] != 0) //每一次给值
+                    {
+                        SetPulseMotor2 = SetPulseMotor2 + RelativeLocation[counter];
+                        RelativeLocation[counter] = 0;
+                    }
+                    pMCI[M2]->pPosCtrl->PositionControlRegulation = 1;  //打开位置控制模式开关
+                    MC_ProgramPositionCommandMotor2( SetPulseMotor2, 0 );
+                }
+                else
+                {
+                    pMCI[M2]->pPosCtrl->PositionControlRegulation = 1;
+                    MC_ProgramPositionCommandMotor2( SetPulseMotor2, 0 );
+                }
+            }
+            break;
+        case 2 :
+            if(counter == M1)
+            {
+                pCtrlPar[M1].SetVelMotor = 0 ;
+                pMCI[M1]->pPosCtrl->PositionControlRegulation = 0;
+                MC_ProgramSpeedRampMotor1(pCtrlPar[M1].SetVelMotor, 100 );
+                delay_200ms[counter]--;
+                if(delay_200ms[counter] < 0)
+                {
+                    delay_200ms[counter] = 200;
+                    if(P_V_I_Switch_using[counter] == 2) //电机M1  位置环----->速度环
+                    {
+                        if(pCtrlPar[M1].Vel_PLL_Motor==0)
+                        {
+                            modetemp[counter] = 3; //切换到速度环
+                            CNT_1MS[counter] = 0;
+                            PositionModeFlag1 = 0; //关闭位置环控制
+                        }
+                    }
+                    else  if(P_V_I_Switch_using[counter] == 3) //电机M1 速度环----->位置环
+                    {
+                        if(pCtrlPar[M1].Vel_PLL_Motor ==0)
+                        {
+                            modetemp[counter] = 1; //切换到位置环
+                            SetPulseMotor1 = MC_GetCurrentPosition1();
+                            pPosCtrl[M1]->Theta =  SetPulseMotor1;
+//                            if(pPosCtrl[M1]->pTrapezoidal->PreS != pPosCtrl[M1]->Theta)
+//                            {
+//                                pPosCtrl[M1]->pTrapezoidal->PreS = pPosCtrl[M1]->Theta;
+//                            }
+                        }
+                    }
+                }
+            }
+            else if(counter == M2)
+            {
+                pCtrlPar[M2].SetVelMotor = 0 ;
+                pMCI[M2]->pPosCtrl->PositionControlRegulation = 0;
+                MC_ProgramSpeedRampMotor2(pCtrlPar[M2].SetVelMotor, 100 );
+                delay_200ms[counter]--;
+                if(delay_200ms[counter] < 0)
+                {
+            delay_200ms[counter] = 200;
+                    if(P_V_I_Switch_using[counter] == 2)
+                    {
+                        if(pCtrlPar[M2].Vel_PLL_Motor ==0)
+                        {
+                            modetemp[counter] = 3; //切换到速度环
+                            CNT_1MS[counter] = 0;
+                            PositionModeFlag2 = 0; //关闭位置环控制
+                        }
+                    }
+                    else  if(P_V_I_Switch_using[counter] == 3)
+                    {
+                        if(pCtrlPar[M2].Vel_PLL_Motor ==0)
+                        {
+                            modetemp[counter] = 1; //切换到位置环
+                            SetPulseMotor2 = MC_GetCurrentPosition2();
+//                            pPosCtrl[M2]->pTrapezoidal->S = pPosCtrl[M2]->Theta ;
+                            pPosCtrl[M2]->Theta  =  SetPulseMotor2 ;
+//                            if(pPosCtrl[M2]->pTrapezoidal->PreS != pPosCtrl[M2]->pTrapezoidal->S)
+//                            {
+//                                pPosCtrl[M2]->pTrapezoidal->PreS = pPosCtrl[M2]->pTrapezoidal->S;
+//                            }
+                        }
+                    }
+                }
+            }
+
+            break;
+        case 3 :  //速度模式
+
+            if(counter == M1&&STM[M1].bState > 5)
+            {
+                Countrer_1ms_CNT = pCtrlPar[M1].hDurationms+1000;
+                if(LockAxleON_OFF == 0) //速度环锁轴
+                {
+                    MC_ProgramSpeedRampMotor1( pCtrlPar[M1].SetVelMotor, pCtrlPar[M1].hDurationms );
+                    CurrentPosition1 =  MC_GetCurrentPosition1();
+                    pMCI[M1]->pPosCtrl->PositionControlRegulation = 0;
+                    CNT_1MS[counter] = 0;
+                    PositionModeFlag1 = 0;
+                }
+                else if(LockAxleON_OFF == 1) //位置环锁轴
+                {
+                    if(pCtrlPar[M1].SetVelMotor != 0)
+                    {
+                        MC_ProgramSpeedRampMotor1( pCtrlPar[M1].SetVelMotor, pCtrlPar[M1].hDurationms );
+                        CurrentPosition1 =  MC_GetCurrentPosition1();
+                        pMCI[M1]->pPosCtrl->PositionControlRegulation = 0;
+                        CNT_1MS[counter] = 0;
+                        PositionModeFlag1 = 0;
+                    }
+                    else
+                    {
+                        if(PositionModeFlag1 == 0)
+                        {
+                            if(CNT_1MS[counter] >= Countrer_1ms_CNT )
+                            {
+                                if(pCtrlPar[M1].Vel_PLL_Motor == 0)
+                                {
+                                    if((CNT_1MS[counter] < Countrer_1ms_CNT+50)&&(CNT_1MS[counter] > Countrer_1ms_CNT+10))
+                                    {
+                                        CurrentPosition1 =  MC_GetCurrentPosition1();
+                                        pMCI[M1]->pPosCtrl->PositionControlRegulation = 1;
+                                        MC_ProgramPositionCommandMotor1( CurrentPosition1, 0 );
+                                    }
+                                    else if(CNT_1MS[counter] >= Countrer_1ms_CNT+50)
+                                    {
+                                        PositionModeFlag1 = 1;
+                                        pMCI[M1]->pPosCtrl->PositionControlRegulation = 1;
+                                        CNT_1MS[counter] = Countrer_1ms_CNT+50 ;
+                                    }
+                                    else
+                                    {
+                                        MC_ProgramSpeedRampMotor1( pCtrlPar[M1].SetVelMotor, pCtrlPar[M1].hDurationms );
+                                    }
+
+                                }
+                                else
+                                {
+                                    CNT_1MS[counter] = Countrer_1ms_CNT ;
+                                    MC_ProgramSpeedRampMotor1( pCtrlPar[M1].SetVelMotor, pCtrlPar[M1].hDurationms );
+                                }
+                            }
+                            else
+                            {
+                                MC_ProgramSpeedRampMotor1( pCtrlPar[M1].SetVelMotor, pCtrlPar[M1].hDurationms );
+                                CurrentPosition1 =  MC_GetCurrentPosition1();
+                                pMCI[M1]->pPosCtrl->PositionControlRegulation = 0;
+                            }
+                        }
+                        else if(PositionModeFlag1 == 1)
+                        {
+                            CNT_1MS[counter] = Countrer_1ms_CNT+500 ;
+                            SetPulseMotor1 =  CurrentPosition1;
+                            MC_ProgramPositionCommandMotor1( SetPulseMotor1, 0 );
+                            TargetPosition1 =  MC_GetTargetPosition1();
+                        }
+                    }
+                }
+
+
+            }
+            else if (counter == M2&&  STM[1].bState > 5)
+            {
+                Countrer2_1ms_CNT = pCtrlPar[M2].hDurationms+1000;
+                if(LockAxleON_OFF == 0) //速度环锁轴
+                {
+                    MC_ProgramSpeedRampMotor2( pCtrlPar[M2].SetVelMotor, pCtrlPar[M2].hDurationms );
+                    CurrentPosition2 =  MC_GetCurrentPosition2();
+                    pMCI[M2]->pPosCtrl->PositionControlRegulation = 0;
+                    CNT_1MS[counter] = 0;
+                    PositionModeFlag2 = 0;
+                }
+                else if(LockAxleON_OFF == 1) //M2位置环锁轴
+                {   if(pCtrlPar[M2].SetVelMotor != 0)
+                    {
+                        MC_ProgramSpeedRampMotor2( pCtrlPar[M2].SetVelMotor, pCtrlPar[M2].hDurationms );
+                        CurrentPosition2 =  MC_GetCurrentPosition2();
+                        pMCI[M2]->pPosCtrl->PositionControlRegulation = 0;
+                        CNT_1MS[counter] = 0;
+                        PositionModeFlag2 = 0;
+                    }
+                    else
+                    {
+                        if(PositionModeFlag2 == 0)
+                        {
+                            if(CNT_1MS[counter] >= Countrer2_1ms_CNT )
+                            {
+                                if(pCtrlPar[M2].Vel_PLL_Motor == 0)
+                                {
+                                    if((CNT_1MS[counter] < Countrer2_1ms_CNT+50)&&(CNT_1MS[counter] > Countrer2_1ms_CNT+10))
+                                    {
+                                        CurrentPosition2 =  MC_GetCurrentPosition2();
+                                        pMCI[M2]->pPosCtrl->PositionControlRegulation = 1;
+                                        MC_ProgramPositionCommandMotor2( CurrentPosition2, 0 );
+                                    }
+                                    else if(CNT_1MS[counter] >= Countrer2_1ms_CNT+50)
+                                    {
+                                        PositionModeFlag2 = 1;
+                                        pMCI[M2]->pPosCtrl->PositionControlRegulation = 1;
+                                        CNT_1MS[counter] = Countrer2_1ms_CNT+50 ;
+                                    }
+                                    else
+                                    {
+                                        MC_ProgramSpeedRampMotor2( pCtrlPar[M2].SetVelMotor, pCtrlPar[M2].hDurationms );
+                                    }
+
+                                }
+                                else
+                                {
+                                    CNT_1MS[counter] = Countrer2_1ms_CNT ;
+                                    MC_ProgramSpeedRampMotor2( pCtrlPar[M2].SetVelMotor, pCtrlPar[M2].hDurationms );
+                                }
+                            }
+                            else
+                            {
+                                MC_ProgramSpeedRampMotor2( pCtrlPar[M2].SetVelMotor, pCtrlPar[M2].hDurationms );
+                                CurrentPosition2 =  MC_GetCurrentPosition2();
+                                pMCI[M2]->pPosCtrl->PositionControlRegulation = 0;
+                            }
+                        }
+                        else if(PositionModeFlag2 == 1)
+                        {
+                            CNT_1MS[counter] = Countrer2_1ms_CNT+500 ;
+                            SetPulseMotor2 =  CurrentPosition2;
+                            MC_ProgramPositionCommandMotor2( SetPulseMotor2, 0 );
+                            TargetPosition2 =  MC_GetTargetPosition2();
+                        }
+                    }
+                }
+            }
+            break;
+        case 4 :
+            if(counter==M1)
+            {
+                MC_ProgramTorqueRampMotor1(pCtrlPar[M1].SetTorqueMotor, 0);
+            }
+            if(counter==M2)
+            {
+                MC_ProgramTorqueRampMotor2(pCtrlPar[M2].SetTorqueMotor, 0);
+            }
+
+            break;
+
+        default:
+            break;
+        }
+    }
+}
+/*------------------------------------------------
+Function:错误指示灯函数
+Input   :led1: 1/下面红灯亮  0/下面红灯不亮
+         led2: 1/上面红灯亮  0/上面红灯不亮
+         led_time:闪烁的次数
+         led_mode:1/慢闪一次 0/快闪
+         DispCounterTemp:闪烁的速度
+Output  :No
+Explain :No
+------------------------------------------------*/
+void LEDSet(u8 led1,u8 led2,u8 led3,u8 led_time,u8 led_mode,u8 DispCounterTemp)
+{
+    static uint32_t DisplayCounter = 0;
+    DisplayCounter++;
+    //led1
+    if(led1==0)
+        RED_LED1_OFF;
+    else if(led_mode)  //慢闪
+    {
+        if(DisplayCounter<2*DispCounterTemp)
+            RED_LED1_ON;
+        else if(DisplayCounter%(2*DispCounterTemp)==0&&DisplayCounter<4*led_time*DispCounterTemp)
+            RED_LED1_TOGGLE;
+    }
+    else if(DisplayCounter<=(2*led_time)*DispCounterTemp)  //快闪
+    {
+        if((DisplayCounter-1)%DispCounterTemp==0)
+        {
+            if((DisplayCounter/DispCounterTemp)%2==0)
+            {
+                RED_LED1_ON;
+            }
+            else
+                RED_LED1_OFF;
+        }
+    }
+    else if(DisplayCounter<2*(led_time+1)*DispCounterTemp)
+    {
+        RED_LED1_OFF;
+    }
+
+    //led2
+    if(led2==0)
+        RED_LED2_OFF;
+    else if(led_mode)
+    {
+        if(DisplayCounter<2*DispCounterTemp)
+            RED_LED2_ON;
+        else if(DisplayCounter%(2*DispCounterTemp)==0&&DisplayCounter<4*led_time*DispCounterTemp)
+            RED_LED2_TOGGLE;
+    }
+    else if(DisplayCounter<=(2*led_time)*DispCounterTemp)
+    {
+        if((DisplayCounter-1)%DispCounterTemp==0)
+        {
+            if((DisplayCounter/DispCounterTemp)%2==0)
+            {
+                RED_LED2_ON;
+            }
+            else
+                RED_LED2_OFF;
+        }
+    }
+    else if(DisplayCounter<2*(led_time+1)*DispCounterTemp)
+    {
+        RED_LED2_OFF;
+    }
+
+    //led3
+    if(led3==0)
+        GREEN_LED_OFF;
+    else if(led_mode)  //快闪
+    {
+        if(DisplayCounter<2*DispCounterTemp)
+            GREEN_LED_ON;
+        else if(DisplayCounter%(2*DispCounterTemp)==0&&DisplayCounter<4*led_time*DispCounterTemp)
+            GREEN_LED_TOGGLE;
+    }
+    else if(DisplayCounter<=(2*led_time)*DispCounterTemp) //慢闪
+    {
+        if((DisplayCounter-1)%DispCounterTemp==0)
+        {
+            if((DisplayCounter/DispCounterTemp)%2==0)
+            {
+                GREEN_LED_ON;
+            }
+            else
+                GREEN_LED_ON;
+        }
+    }
+    else if(DisplayCounter<2*(led_time+1)*DispCounterTemp)
+    {
+        GREEN_LED_OFF;
+    }
+
+
+    //time clear
+    if(led_mode)
+    {
+        if(DisplayCounter>(4*led_time+2)*DispCounterTemp)
+            DisplayCounter=0;
+    }
+    else if(DisplayCounter>(2*led_time+2)*DispCounterTemp)
+        DisplayCounter=0;
+}
+/*------------------------------------------------
+Function:驱动器错误指示
+Input   :No
+Output  :No
+Explain :10ms运行一次，执行与嘀嗒定时器当中
+------------------------------------------------*/
+u8 led_test[6] = {0,0,1,10,0,10};
+void DisplayErrorLed_Handle(void)
+{
+    u32 i = 0;
+    switch(i)
+    {
+    case MC_NO_ERROR://两个红灯关闭，绿灯闪烁
+        LEDSet(led_test[0],led_test[1],led_test[2],led_test[3],led_test[4],led_test[5]);
+        break;
+    case MC_FOC_DURATION:
+        break;
+    case MC_OVER_VOLT:
+        break;
+    case MC_UNDER_VOLT:
+        break;
+    case MC_OVER_TEMP:
+        break;
+    case ERR_ENCODER:
+        break;
+    case MC_SPEED_FDBK:
+        break;
+    case MC_BREAK_IN:
+        break;
+    case MC_SW_ERROR:
+        break;
+    case ERR_CURR_12_OVER_LOAD:
+    case ERR_CURR_15_OVER_LOAD:
+    case ERR_CURR_20_OVER_LOAD:
+    case ERR_CURR_25_OVER_LOAD:
+    case ERR_CURR_30_OVER_LOAD:
+        break;
+    case ERR_CURR_OVER_MAX:
+        break;
+    case ERR_MOTOR_STUCK_ERR:
+        break;
+    case ERR_OVER_VEL_ERR:
+        break;
+    case ERR_POS_FOLLOWING_ERR:
+        break;
+    case ERR_HALL_STUDY:
+        break;
+    case ERR_CAN_COMMUNICATION:
+        break;
+    default:
+        break;
+    }
+}
+/*------------------------------------------------
+Function:参考注入，用于自适应位置、速度和电流控制回路
+Input   :No
+Output  :No
+Explain :variables: inject point, type, phase, value are not essential to be passed as params.
+------------------------------------------------*/
+
+Trig_Components Vector_Components;
+
+
+LOOP_TEST_T	 loopTestPar;								//环路测试相关参数
+void ReferenceInjection( \
+                         long	*injectPoint, \
+                         long	*injectType, \
+                         float	*injectPhase, \
+                         long	*injectValue, \
+                         long	*injectFreq, \
+                         long	*injectAmp, \
+                         long	*injectInit, \
+                         long	*refOut \
+                       )
+{
+    float Phasecycle;
+//	// calc inject phase first
+//	if ((*injectPoint == INJECT_POINT_POSREF) || (*injectPoint == INJECT_POINT_VELREF))
+//	{
+//		*injectPhase += 65535 * SAMPLE_TIME * (*injectFreq);
+//	}
+//	else
+    {   //(opt)
+        Phasecycle = 65535*SAMPLE_TIME;
+        Phasecycle = Phasecycle*(*injectFreq);
+        *injectPhase = *injectPhase + Phasecycle;
+    }
+    if (*injectPhase > 65535)
+    {
+        *injectPhase -= 65535;
+    }
+
+    switch (*injectType)
+    {
+    case INJECT_TYPE_NONE:					// none
+    {
+        *injectPhase = 0.0;
+
+        if (*injectPoint == INJECT_POINT_POSREF)	// a little special when pos ref inject
+        {
+            *injectInit = *refOut;
+        }
+
+        break;
+    }
+
+    case INJECT_TYPE_SIN_DIRECT:			// sin
+    {
+        Vector_Components = MCM_Trig_Functions((int16_t)(*injectPhase));//time:530ns
+        *injectValue = (long) (*injectAmp * Vector_Components.hSin/32768);
+        if (*injectPoint == INJECT_POINT_POSREF)
+        {
+            *refOut = *injectInit + *injectValue;
+        }
+        else
+        {
+            *refOut = *injectValue;
+        }
+
+        break;
+    }
+
+    case INJECT_TYPE_SQUARE_DIRECT:			// square
+    {
+        if (*injectPhase < 32768)
+        {
+            *injectValue = *injectAmp;
+        }
+        else
+        {
+            *injectValue = -(*injectAmp);
+        }
+
+        if (*injectPoint == INJECT_POINT_POSREF)
+        {
+            *refOut = *injectInit + *injectValue;
+        }
+        else
+        {
+            *refOut = *injectValue;
+        }
+
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+///*------------------------------------------------
+//Function:过载检查
+//Input   :No
+//Output  :No
+//Explain :No
+//------------------------------------------------*/
+//void OverLoadCurrentCheck(Uint16 axisNum)
+//{
+//
+//}
+/*------------------------------------------------
+Function:最大力矩限制
+Input   :No
+Output  :No
+Explain :需要放在电流环当中执行
+------------------------------------------------*/
+int32_t TorqueLimit(u8 axes)
+{
+    if(FOCVars[axes].Iqdref.q > pCtrlPar[axes].torqueLimit)
+    {
+        FOCVars[axes].Iqdref.q = pCtrlPar[axes].torqueLimit;
+    }
+    else if(FOCVars[axes].Iqdref.q < -pCtrlPar[axes].torqueLimit)
+    {
+        FOCVars[axes].Iqdref.q = -pCtrlPar[axes].torqueLimit;
+    }
+}
+/*------------------------------------------------
+Function:堵转检查
+Input   :No
+Output  :错误代码：0x00008000
+Explain :执行周期：500us
+------------------------------------------------*/
+uint32_t MotorStuckCheck(u8 axes)
+{
+    static uint32_t  giStuckTimeCnt[NUMBER_OF_AXES] = {0,0};
+    uint32_t errorcode = MC_NO_ERROR;
+    if(1&&STM[axes].bState == RUN)//堵转开关打开
+    {
+        if((in32abs(FOCVars[axes].Iqdref.q) > l_abs(MotorParameters[axes].ShortCircuit))&& (in32abs(pCtrlPar[axes].Vel_PLL_Motor) <= MotorParameters[axes].LockedSpeed))
+        {
+            giStuckTimeCnt[axes]++;
+            if(giStuckTimeCnt[axes] > MotorParameters[axes].LockeTicks)
+            {
+                errorcode = ERR_MOTOR_STUCK_ERR;
+                giStuckTimeCnt[axes] = 0;
+                return errorcode;
+            }
+        }
+        else if(giStuckTimeCnt[axes]>0)
+        {
+            giStuckTimeCnt[axes]--;
+        }
+    }
+    return errorcode;
+}
+/*------------------------------------------------
+Function:编码器错误检查
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+uint32_t EncErrorCheck()
+{
+
+}
+/*------------------------------------------------
+Function:缺相检查
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+uint32_t DefaultPhaseCheck()
+{
+
+}
+/*------------------------------------------------
+Function:失速检查
+Input   :No
+Output  :错误代码：ERR_OVER_VEL_ERR 0x00010000
+Explain :执行周期：500us 问题：存在BUG电机速度0速度失能之后旋转电机,报错之后直接使能电机可能回进入软件错误
+再失能，位置环锁轴在之前的位置
+MotorParameters[axes].MAXSpeed该变量为最终设置的软件最大速度限制，该值需要包含由于PID调节的过冲
+------------------------------------------------*/
+uint32_t  giStallTimeCnt[NUMBER_OF_AXES] = {0};
+uint32_t StallCheck(u8 axes)
+{
+//    static uint32_t  giStallTimeCnt[NUMBER_OF_AXES] = {0};//两个电机需要两个
+    uint32_t errorcode = MC_NO_ERROR;
+    int32_t  MAX_giStallTimeCnt[NUMBER_OF_AXES] = {pCtrlPar[M1].hDurationms*3,pCtrlPar[M2].hDurationms*3};
+    int32_t  SetVel_Multiply_VelPLL = 0;
+    if(1&&STM[axes].bState == RUN)//失速保护开关打开&&电机使能
+    {
+        //条件运算符是右结合的，也就是说，从右向左分组计算。例如，a ? b : c ? d : e将按a ? b : (c ? d : e)执行。
+        //pCtrlPar[M1].Vel_PLL_Motor*pCtrlPar[M1].SetVelMotor<0?giStallTimeCnt++:(giStallTimeCnt>0?giStallTimeCnt--:giStallTimeCnt==0);
+        //优先级：~>&>|
+        SetVel_Multiply_VelPLL = pCtrlPar[axes].Vel_PLL_Motor*pCtrlPar[axes].SetVelMotor;
+        //在速度较小的时候如果PID不够硬，外部给反向力矩会导致实际速度为负值并且持续一段时间
+        if(in32abs(pCtrlPar[axes].SetVelMotor)<200&&in32abs(pCtrlPar[axes].Vel_PLL_Motor)<200)
+        {
+            if(SetVel_Multiply_VelPLL<0)
+            {
+                SetVel_Multiply_VelPLL = -1*SetVel_Multiply_VelPLL;
+            }
+        }
+        if((SetVel_Multiply_VelPLL< 0 ||in32abs(pCtrlPar[axes].Vel_PLL_Motor)> MotorParameters[axes].MAXSpeed )&& STM[axes].bState == 6)
+        {
+            giStallTimeCnt[axes]++;
+            if(giStallTimeCnt[axes]>MAX_giStallTimeCnt[axes])
+            {
+                errorcode = ERR_OVER_VEL_ERR;
+                giStallTimeCnt[axes] = 0;
+                return errorcode;
+            }
+        }
+        else if(giStallTimeCnt[axes]>0)
+        {
+            giStallTimeCnt[axes]--;
+        }
+    }
+    return errorcode;
+}
+/*------------------------------------------------
+Function:位置偏差过大
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+uint32_t PositionalDeviationCheck()
+{
+
+}

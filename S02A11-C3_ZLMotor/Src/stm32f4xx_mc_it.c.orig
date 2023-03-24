@@ -1,0 +1,1428 @@
+/**
+  ******************************************************************************
+  * @file    stm32f4xx_mc_it.c
+  * @author  Motor Control SDK Team, ST Microelectronics
+  * @brief   Main Interrupt Service Routines.
+  *          This file provides exceptions handler and peripherals interrupt
+  *          service routine related to Motor Control for the STM32F4 Family.
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2019 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under Ultimate Liberty license
+  * SLA0044, the "License"; You may not use this file except in compliance with
+  * the License. You may obtain a copy of the License at:
+  *                             www.st.com/SLA0044
+  *
+  ******************************************************************************
+  * @ingroup STM32F4xx_IRQ_Handlers
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "mc_type.h"
+#include "mc_config.h"
+#include "mc_tasks.h"
+#include "ui_task.h"
+#include "parameters_conversion.h"
+#include "motorcontrol.h"
+#include "stm32f4xx_ll_exti.h"
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx.h"
+#include "canopen_od.h"
+#include "canopen_pdo.h"
+#include "ds402.h"
+#include "bsp_app_function.h"
+/* USER CODE BEGIN Includes */
+extern void Usart_Labview_Analyze(void);
+extern STM_Handle_t STM[NBR_OF_MOTORS];
+extern UART_HandleTypeDef huart3;
+/* USER CODE END Includes */
+u8 HALL_GetPhase2(void);
+u8 HALL_GetPhase1(void);
+/** @addtogroup MCSDK
+  * @{
+  */
+
+/** @addtogroup STM32F4xx_IRQ_Handlers STM32F4xx IRQ Handlers
+  * @{
+  */
+
+/* USER CODE BEGIN PRIVATE */
+
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+#define SYSTICK_DIVIDER (SYS_TICK_FREQUENCY/1000)
+/* Private macro -------------------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/
+/* Private function prototypes -----------------------------------------------*/
+/* Private functions ---------------------------------------------------------*/
+extern PWMC_Handle_t * pwmcHandle[NBR_OF_MOTORS];
+/* USER CODE END PRIVATE */
+
+/* Public prototypes of IRQ handlers called from assembly code ---------------*/
+void ADC_IRQHandler(void);
+void TIMx_UP_M1_IRQHandler(void);
+void TIMx_BRK_M1_IRQHandler(void);
+void SPD_TIM_M1_IRQHandler(void);
+void TIMx_UP_M2_IRQHandler(void);
+void TIMx_BRK_M2_IRQHandler(void);
+void SPD_TIM_M2_IRQHandler(void);
+void USART_IRQHandler(void);
+void HardFault_Handler(void);
+void SysTick_Handler(void);
+void EXTI3_IRQHandler (void);
+void EXTI9_5_IRQHandler(void);
+uint8_t HALL_CC_First=0,HALL2_CC_First=0,HALL_CC_First11=0;
+uint8_t PrevHallState1,PrevHallState2,HallState1,HallState2;
+int16_t HAL_Init_Electrical_Angle2,HAL_CommutationAngle2;
+int16_t HAL_CommutationAngle;
+
+u16  LWIP_CNT_1ms = 0,Countrer_1ms=0,Countrer1_1ms,Countrer2_1ms;
+u16 Motor1HallGetTimCNT[200],Motor2HallGetTimCNT[200];
+s16 Hall_ElAngle1[7],Hall_ElAngle2[7];
+u8 HallStudyFlag1=0,HallStudyFlag2=0;
+u16 HallStudyCNT=0,HallStudyCNT2=0,Hall_EAC_Ticks = 3000;
+extern s16 ENC_ElAngle,ENC_ElAngle2,Angle_Switch2;
+extern float	CurrentPosition1,TargetPosition1,MoveDuration1,CurrentPosition2,TargetPosition2,MoveDuration2;
+extern PID_Handle_t *pPIDIq[NBR_OF_MOTORS];
+extern PID_Handle_t *pPIDPosCtrl[NBR_OF_MOTORS];
+extern int32_t hSpeedRef_Pos;
+extern uint8_t MC_StartStopFlag ;
+extern PosCtrl_Handle_t *pPosCtrl[NBR_OF_MOTORS];
+extern MotorParameters_t MotorParameters[NBR_OF_MOTORS];
+/**
+  * @brief  This function handles ADC1/ADC2 interrupt request.
+  * @param  None
+  * @retval None
+  */
+void ADC_IRQHandler(void)
+{
+    /* USER CODE BEGIN ADC_IRQn 0 */
+//   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_SET);
+    /* USER CODE END ADC_IRQn 0 */
+    if(LL_ADC_IsActiveFlag_JEOS(ADC1))
+    {
+        // Clear Flags
+        ADC1->SR &= ~(uint32_t)(LL_ADC_FLAG_JEOS | LL_ADC_FLAG_JSTRT);
+
+        TSK_HighFrequencyTask();          /*GUI, this section is present only if DAC is disabled*/
+    }
+#ifdef ADC3
+    else
+    {
+        // Clear Flags
+        ADC3->SR &= ~(uint32_t)(LL_ADC_FLAG_JEOS | LL_ADC_FLAG_JSTRT);
+
+        TSK_HighFrequencyTask();          /*GUI, this section is present only if DAC is disabled*/
+    }
+#endif
+    /* USER CODE BEGIN ADC_IRQn 1 */
+		 CanLoadRate.timer++;
+    if(RPDO_SYNC_SIGN & RPDO_SYNC_READY)
+    {
+        RPDO_SYNC_SIGN &= ~RPDO_SYNC_READY;
+        _RPOD_SyncEvent(&CANopen_Drive,pRpdoDirectPar,1);
+    }
+		
+//  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_RESET);
+    /* USER CODE END ADC_IRQn 1 */
+}
+
+/**
+  * @brief  This function handles first motor TIMx Update interrupt request.
+  * @param  None
+  * @retval None
+  */
+void TIMx_UP_M1_IRQHandler(void)
+{
+    /* USER CODE BEGIN TIMx_UP_M1_IRQn 0 */
+
+    /* USER CODE END TIMx_UP_M1_IRQn 0 */
+
+    LL_TIM_ClearFlag_UPDATE(PWM_Handle_M1.pParams_str->TIMx);
+    R3_2_TIMx_UP_IRQHandler(&PWM_Handle_M1);
+    TSK_DualDriveFIFOUpdate( M1 );
+    /* USER CODE BEGIN TIMx_UP_M1_IRQn 1 */
+
+    /* USER CODE END TIMx_UP_M1_IRQn 1 */
+}
+
+/**
+  * @brief  This function handles second motor TIMx Update interrupt request.
+  * @param  None
+  * @retval None
+  */
+void TIMx_UP_M2_IRQHandler(void)
+{
+    /* USER CODE BEGIN TIMx_UP_M2_IRQn 0 */
+
+    /* USER CODE END TIMx_UP_M2_IRQn 0 */
+    LL_TIM_ClearFlag_UPDATE(PWM_Handle_M2.pParams_str->TIMx);
+    R3_2_TIMx_UP_IRQHandler(&PWM_Handle_M2);
+    TSK_DualDriveFIFOUpdate( M2 );
+    /* USER CODE BEGIN TIMx_UP_M2_IRQn 1 */
+
+    /* USER CODE END TIMx_UP_M2_IRQn 1 */
+}
+
+/**
+  * @brief  This function handles first motor BRK interrupt.
+  * @param  None
+  * @retval None
+  */
+void TIMx_BRK_M1_IRQHandler(void)
+{
+    /* USER CODE BEGIN TIMx_BRK_M1_IRQn 0 */
+    R3_2_SwitchOffPWM( pwmcHandle[M1] );
+    R3_2_SwitchOffPWM( pwmcHandle[M2] );
+    /* USER CODE END TIMx_BRK_M1_IRQn 0 */
+    if (LL_TIM_IsActiveFlag_BRK(PWM_Handle_M1.pParams_str->TIMx))
+    {
+        LL_TIM_ClearFlag_BRK(PWM_Handle_M1.pParams_str->TIMx);
+        R3_2_BRK_IRQHandler(&PWM_Handle_M1);
+        R3_2_BRK_IRQHandler(&PWM_Handle_M2);
+    }
+    /* Systick is not executed due low priority so is necessary to call MC_Scheduler here.*/
+    MC_Scheduler();
+
+    /* USER CODE BEGIN TIMx_BRK_M1_IRQn 1 */
+
+    /* USER CODE END TIMx_BRK_M1_IRQn 1 */
+}
+
+/**
+  * @brief  This function handles TIMx global interrupt request for M1 Speed Sensor.
+  * @param  None
+  * @retval None
+  */
+s16 Hall_AvElAngle1,Hall_AvElAngle1CNT=0,Hall_AvElAngle2,Hall_AvElAngle2CNT=0;
+s32 Hall_AvElAngle1Sum,Hall_AvElAngle2Sum;
+s16 HALL_CH1_Value1=0,HALL_CH1_Value2=0,HALL_CH1_ValueDelta=0,HALL_CH1_ValueDelta1,HALL_CH1_ValueDelta2,HALL_CH1_ValueOffset=0;
+s16 HALL_CH2_Value1=0,HALL_CH2_Value2=0,HALL_CH2_ValueDelta=0,HALL_CH2_ValueDelta1,HALL_CH2_ValueDelta2,HALL_CH2_ValueOffset=0;
+//u16 HALL_CH2_Value1=0,HALL_CH2_Value2=0,HALL_CH2_ValueDelta=0;
+
+u8  TIM4CH1_CAPTURE_STA=0;	//¨º?¨¨?2???¡Á¡ä¨¬?
+u16	TIM4CH1_CAPTURE_VAL;	//¨º?¨¨?2????¦Ì
+
+u8  TIM4CH2_CAPTURE_STA=0;	//¨º?¨¨?2???¡Á¡ä¨¬?
+u16	TIM4CH2_CAPTURE_VAL;	//¨º?¨¨?2????¦Ì
+s16 PWM_Init_Electrical_Angle=0,PWM_Init_Electrical_Angle2=0;
+void SPD_TIM_M1_IRQHandler(void)
+{
+    /* USER CODE BEGIN SPD_TIM_M1_IRQn 0 */
+
+    /* USER CODE END SPD_TIM_M1_IRQn 0 */
+
+    /* HALL Timer Update IT always enabled, no need to check enable UPDATE state */
+//  if (LL_TIM_IsActiveFlag_UPDATE(HALL_M1.TIMx))
+//  {
+//    LL_TIM_ClearFlag_UPDATE(HALL_M1.TIMx);
+////    HALL_TIMx_UP_IRQHandler(&HALL_M1);
+//    /* USER CODE BEGIN M1 HALL_Update */
+
+//    /* USER CODE END M1 HALL_Update   */
+//  }
+//  else
+//  {
+//
+//			HALL_CC_First11++;
+//			Motor1HallGetTimCNT[HALL_CC_First11] = LL_TIM_GetCounter ( TIM4 );
+//			if(HALL_CC_First11>=99)HALL_CC_First11=0;
+//    /* Nothing to do */
+//  }
+
+    if (LL_TIM_IsActiveFlag_CC1 (TIM4))
+    {
+
+        HallState1 = (GPIOD->IDR>>12)&(0x1);
+        if(HallState1 == 1)
+        {
+//			TIM4->CNT = 0;
+            HALL_CH1_Value1 = LL_TIM_GetCounter ( TIM4 );
+//			TIM4->CCER |=0x0002 ;
+        }
+        else
+        {
+            HALL_CH1_Value2 = LL_TIM_GetCounter ( TIM4 );
+            if(HALL_CH1_Value2>HALL_CH1_Value1)
+            {
+                HALL_CH1_ValueDelta = HALL_CH1_Value2 - HALL_CH1_Value1 ;
+            }
+            else
+            {
+                HALL_CH1_ValueDelta = HALL_CH1_Value2 + 65536- HALL_CH1_Value1 ;
+            }
+
+            if(HALL_CH1_ValueDelta>111)
+            {
+                if(HALL_CH1_ValueDelta>29000)HALL_CH1_ValueDelta = 29000;
+
+                HALL_CH1_ValueDelta1 = 29000 - HALL_CH1_ValueDelta;
+                HALL_CH1_ValueDelta1 = (HALL_CH1_ValueDelta1%2063) ;
+                HALL_CH1_ValueDelta2 = (HALL_CH1_ValueDelta1 - HALL_CH1_ValueOffset)*31.76;
+
+                if(HALL_CC_First<1 )
+                {
+                    PWM_Init_Electrical_Angle =  HALL_CH1_ValueDelta2;
+                    HALL_CC_First++;
+                }
+            }
+            else
+            {
+                HALL_CH1_ValueDelta1 = 0;
+            }
+//			TIM4->CCER &=0xfffd ;
+        }
+        LL_TIM_ClearFlag_CC1(TIM4);
+    }
+    else if (LL_TIM_IsActiveFlag_CC2 (TIM4))
+    {
+        LL_TIM_ClearFlag_CC2(TIM4);
+        HallState1 = (GPIOD->IDR>>12)&(0x2);
+        if(HallState1 == 2)
+        {
+
+            HALL_CH2_Value1 = LL_TIM_GetCounter ( TIM4 );
+        }
+        else
+        {
+            HALL_CH2_Value2 = LL_TIM_GetCounter ( TIM4 );
+            if(HALL_CH2_Value2>HALL_CH2_Value1)
+            {
+                HALL_CH2_ValueDelta = HALL_CH2_Value2 - HALL_CH2_Value1 ;
+            }
+            else
+            {
+                HALL_CH2_ValueDelta = HALL_CH2_Value2 - HALL_CH2_Value1 + 65536;
+            }
+
+            if(HALL_CH2_ValueDelta>111)
+            {
+                if(HALL_CH2_ValueDelta>29000)HALL_CH2_ValueDelta = 29000;
+
+                HALL_CH2_ValueDelta1 = 29000 - HALL_CH2_ValueDelta;
+                HALL_CH2_ValueDelta1 = (HALL_CH2_ValueDelta1%2063) ;
+                HALL_CH2_ValueDelta2 = (HALL_CH2_ValueDelta1 - HALL_CH2_ValueOffset)*31.76;
+
+                if(HALL2_CC_First<1 )
+                {
+                    PWM_Init_Electrical_Angle2 =  HALL_CH2_ValueDelta2;
+                    HALL2_CC_First++;
+                }
+            }
+            else
+            {
+                HALL_CH2_ValueDelta1 = 0;
+            }
+
+        }
+
+    }
+
+
+//  /* HALL Timer CC1 IT always enabled, no need to check enable CC1 state */
+//  if (LL_TIM_IsActiveFlag_CC1 (HALL_M1.TIMx))
+//  {
+//
+//    LL_TIM_ClearFlag_CC1(HALL_M1.TIMx);
+//
+//		HALL_CC_First++;
+//
+//		if(HallStudyFlag1 == 1)
+//		{
+//			HallState1 = (GPIOD->IDR>>12)&(0x7);
+//
+//			if(HallStudyCNT<Hall_EAC_Ticks)
+//			{
+//				Angle_Switch = 0;
+//			}
+//			else
+//			{
+////			  HallStudyCNT=Hall_EAC_Ticks;
+////				Angle_Switch =2;
+////				Motor1HallGetTimCNT[HALL_CC_First] = LL_TIM_GetCounter ( TIM3 );
+
+//				Hall_ElAngle1[HallState1] = ENC_ElAngle;
+//
+//        if(HallState1 == 5)
+//				{
+//					Hall_AvElAngle1CNT++;
+//					Hall_AvElAngle1Sum += Hall_ElAngle1[5];
+//				}
+
+//			}
+//
+//		}
+//		else
+//		{
+////			HallStudyCNT=0;
+//			HALL_CC_First11++;
+//			Hall_AvElAngle1CNT =0;
+//			Hall_AvElAngle1Sum =0;
+//			Motor1HallGetTimCNT[HALL_CC_First11] = LL_TIM_GetCounter ( TIM4 );
+//			if(HALL_CC_First11>=99)HALL_CC_First11=0;
+////			Angle_Switch = 3;
+////
+////			if(HALL_CC_First<2)
+////			{
+////				HALL_TIMx_CC_IRQHandler(&HALL_M1);
+////				Motor1HallGetTimCNT[HALL_CC_First] = LL_TIM_GetCounter ( TIM3 );
+////	//	        if(HALL_CC_First>=90)
+////	//				HALL_CC_First=0;
+////
+////				}
+////				else
+////				{
+////					HALL_CC_First = 2;
+//////					HAL_NVIC_DisableIRQ(TIM4_IRQn);
+////				}
+//			}
+//    /* USER CODE BEGIN M1 HALL_CC1 */
+
+//    /* USER CODE END M1 HALL_CC1 */
+//  }
+//  else
+//  {
+//  /* Nothing to do */
+//  }
+    /* USER CODE BEGIN SPD_TIM_M1_IRQn 1 */
+
+    /* USER CODE END SPD_TIM_M1_IRQn 1 */
+}
+
+u16 Hall_AvElAngle2Temp,Hall_AvElAngle1Temp;
+s16 ENCODER_M2_DeltaElAngle,ENCODER_M1_DeltaElAngle;
+
+	  int32_t TIM2_CNT,TIM4_CNT;
+    int32_t TIM2_CNT_Temp,TIM4_CNT_Temp ;
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+//	  int32_t TIM2_CNT,TIM4_CNT;
+//    uint16_t TIM2_CNT_Temp,TIM4_CNT_Temp ;
+	
+    if((GPIO_Pin == M1_HALL_U_Pin )||(GPIO_Pin == M1_HALL_V_Pin )||(GPIO_Pin == M1_HALL_W_Pin ))
+    {
+        /* HALL Timer CC1 IT always enabled, no need to check enable CC1 state */
+
+      if(SetSpeedMotor1 !=0)
+			{
+        HALL_CC_First++;
+			}
+        PrevHallState1 = HallState1;
+        HallState1 = HALL_GetPhase1();
+
+        if(HallStudyFlag1 == 1)
+        {
+
+            if(HallStudyCNT<Hall_EAC_Ticks)
+            {
+                Angle_Switch = 0;
+            }
+            else
+            {
+//			  HallStudyCNT=Hall_EAC_Ticks;
+//				Angle_Switch =2;
+//				Motor1HallGetTimCNT[HALL_CC_First] = LL_TIM_GetCounter ( TIM3 );
+
+                Hall_ElAngle1[HallState1] = ENC_ElAngle;
+
+                if(HallState1 == 5)
+                {
+                    Hall_AvElAngle1CNT++;
+                    Hall_AvElAngle1Sum += Hall_ElAngle1[5];
+                }
+
+            }
+
+        }
+        else
+        {
+//			HallStudyCNT=0;
+            HALL_CC_First11++;
+            Hall_AvElAngle1CNT =0;
+            Hall_AvElAngle1Sum =0;
+            Motor1HallGetTimCNT[HALL_CC_First11] = LL_TIM_GetCounter ( TIM4 );
+            if(HALL_CC_First11>=99)HALL_CC_First11=0;
+//            Angle_Switch = 3;
+
+            if(HALL_CC_First<2)
+            {
+
+                switch ( HallState1 )
+                {
+                case STATE_5:
+                    if ( PrevHallState1 == STATE_4 )
+                    {
+
+//						HAL_CommutationAngle1 = (int16_t)(HALL_PHASE_SHIFT1 * 65536/360);//
+                        HAL_CommutationAngle = (int16_t)(HALL_PHASE_SHIFT);//
+                    }
+                    else if ( PrevHallState1 == STATE_1 )
+                    {
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) + S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_1:
+                    if ( PrevHallState1 == STATE_5 )
+                    {
+
+                        HAL_CommutationAngle = (int16_t)(HALL_PHASE_SHIFT) + S16_60_PHASE_SHIFT;
+                    }
+                    else if ( PrevHallState1 == STATE_3 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) + S16_120_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_3:
+                    if ( PrevHallState1 == STATE_1 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) + S16_120_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState1 == STATE_2 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) + S16_120_PHASE_SHIFT +
+                                                            S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+
+                    break;
+
+                case STATE_2:
+                    if ( PrevHallState1 == STATE_3 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) + S16_120_PHASE_SHIFT
+                                                            + S16_60_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState1 == STATE_6 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) - S16_120_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_6:
+                    if ( PrevHallState1 == STATE_2 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) - S16_120_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState1 == STATE_4 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) - S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_4:
+                    if ( PrevHallState1 == STATE_6 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) - S16_60_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState1 == STATE_5 )
+                    {
+
+                        HAL_CommutationAngle = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT) );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                default:
+
+
+                    break;
+                }
+								
+								if(HallStudyFlag1 == 0)
+								{
+								    if(HALL_CC_First == 1)
+                    {
+											  ENCODER_M1.Angle_Compensation = HAL_CommutationAngle - ENCODER_M1._Super.hElAngle ;
+										}
+								}
+								else
+								{
+								   ENCODER_M1.Angle_Compensation = 0 ;
+								}
+								
+            }
+            else
+            {
+                HALL_CC_First = 2;
+//					HAL_NVIC_DisableIRQ(TIM4_IRQn);
+            }
+        }
+
+
+
+    }
+
+    if((GPIO_Pin == M2_HALL_U_Pin )||(GPIO_Pin == M2_HALL_V_Pin )||(GPIO_Pin == M2_HALL_W_Pin ))
+    {
+			if(SetSpeedMotor2 !=0)
+			{
+        HALL2_CC_First++;
+			}
+        PrevHallState2 = HallState2;
+        HallState2 = (GPIOD->IDR>>5)&(0x7);
+
+        if(HallStudyFlag2 == 1)
+        {
+//		HallState1 = (GPIOD->IDR>>12)&(0x7);
+//		SetSpeedMotor2 = 1;
+            hSpeedRef_Pos = 0;
+            if(HallStudyCNT2<Hall_EAC_Ticks)
+            {
+                Angle_Switch2 = 0;
+
+            }
+            else
+            {
+//			HallStudyCNT2=Hall_EAC_Ticks;
+//			Angle_Switch2 =2;
+//				Motor1HallGetTimCNT[HALL_CC_First] = LL_TIM_GetCounter ( TIM3 );
+
+                Hall_ElAngle2[HallState2] = ENC_ElAngle2;
+
+                if(HallState2 == 5)
+                {
+                    Hall_AvElAngle2CNT++;
+                    Hall_AvElAngle2Sum += Hall_ElAngle2[5];
+
+//				if(Hall_AvElAngle2CNT >=POLE_PAIR_NUM)
+//				{
+//					Hall_AvElAngle2 = (Hall_AvElAngle2Sum/Hall_AvElAngle2CNT);
+//					Hall_AvElAngle2Temp = (u16)Hall_AvElAngle2;
+//					HALL_PHASE_SHIFT2 = (s16)((u32)Hall_AvElAngle2Temp*360/65536);
+////					Hall_AvElAngle2CNT =0;
+//					Hall_AvElAngle2Sum =0;
+//					HALL_CC_First=0;
+////          HallStudyFlag2 = 0;
+////          SetSpeedMotor2 = 0;
+////          Angle_Switch2 = 0;
+////          HallStudyCNT2	= 0;
+////	        CurrentPosition2 =  MC_GetCurrentPosition2();
+//				  pPIDSpeed[M2]->wIntegralTerm = 0x00000000UL;
+//				  pPIDIq[M2]->wIntegralTerm = 0x00000000UL;
+//					pPIDPosCtrl[M2]->wIntegralTerm = 0x00000000UL;
+//          MC_StopMotor2();
+//				}
+
+                }
+
+            }
+        }
+        else
+        {
+//		HallStudyCNT=0;
+            Hall_AvElAngle2CNT =0;
+            Hall_AvElAngle2Sum =0;
+//		Angle_Switch2 = 3;
+
+            if(HALL2_CC_First<2)
+            {
+                switch ( HallState2 )
+                {
+                case STATE_5:
+                    if ( PrevHallState2 == STATE_4 )
+                    {
+
+//						HAL_CommutationAngle2 = (int16_t)(HALL_PHASE_SHIFT2 * 65536/360);//
+                        HAL_CommutationAngle2 = (int16_t)(HALL_PHASE_SHIFT2);//
+                    }
+                    else if ( PrevHallState2 == STATE_1 )
+                    {
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) + S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_1:
+                    if ( PrevHallState2 == STATE_5 )
+                    {
+
+                        HAL_CommutationAngle2 = (int16_t)(HALL_PHASE_SHIFT2) + S16_60_PHASE_SHIFT;
+                    }
+                    else if ( PrevHallState2 == STATE_3 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) + S16_120_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_3:
+                    if ( PrevHallState2 == STATE_1 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) + S16_120_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState2 == STATE_2 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) + S16_120_PHASE_SHIFT +
+                                                             S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+
+                    break;
+
+                case STATE_2:
+                    if ( PrevHallState2 == STATE_3 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) + S16_120_PHASE_SHIFT
+                                                             + S16_60_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState2 == STATE_6 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) - S16_120_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_6:
+                    if ( PrevHallState2 == STATE_2 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) - S16_120_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState2 == STATE_4 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) - S16_60_PHASE_SHIFT );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                case STATE_4:
+                    if ( PrevHallState2 == STATE_6 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) - S16_60_PHASE_SHIFT );
+                    }
+                    else if ( PrevHallState2 == STATE_5 )
+                    {
+
+                        HAL_CommutationAngle2 = ( int16_t )( (int16_t)(HALL_PHASE_SHIFT2) );
+                    }
+                    else
+                    {
+                    }
+                    break;
+
+                default:
+
+
+                    break;
+                }
+
+								if(HallStudyFlag2 == 0)
+								{
+								    if(HALL2_CC_First == 1)
+                    {
+											  ENCODER_M2.Angle_Compensation = HAL_CommutationAngle2 - ENCODER_M2._Super.hElAngle ;
+										}
+								}
+								else
+								{
+								   ENCODER_M2.Angle_Compensation = 0 ;
+								}
+											
+											
+//                if(SetSpeedMotor2 > 0)
+//                {
+////									  HALL2_CC_First++;
+//                    if(HALL2_CC_First == 1)
+//                    {
+////                        Uart_TxBuffer_CNT = 0 ;
+////                        Uart_TxBuffer_CNT1 =0 ;
+//											  ENCODER_M2.Angle_Compensation = HAL_CommutationAngle2 - ENCODER_M2._Super.hElAngle ;
+
+//////                       if(ENCODER_M2_DeltaElAngle<0)
+//////											 {
+//////											   ENCODER_M2_DeltaElAngle = ENCODER_M2_DeltaElAngle + 65536 ;Angle_Compensation
+//////											 }
+//////                        TIM2_CNT_Temp = ENCODER_M2_DeltaElAngle * ENCODER_M2.PulseNumber/ENCODER_M2._Super.bElToMecRatio/65536;
+////											TIM2_CNT_Temp = ENCODER_M2_DeltaElAngle/40;
+
+//////                        if(TIM2_CNT<0) TIM2_CNT = TIM2_CNT + ENCODER_M2.PulseNumber/ENCODER_M2._Super.bElToMecRatio ;
+////                        TIM2_CNT = TIM2->CNT;
+////											if(TIM2_CNT_Temp>0)
+////                        TIM2_CNT = (TIM2_CNT + TIM2_CNT_Temp );
+////											else
+////												TIM2_CNT = (TIM2_CNT - TIM2_CNT_Temp );
+////                        if(TIM2_CNT>0) TIM2->CNT = TIM2_CNT ;
+////											  else 
+////                        pSpeed_Mesa.fAngle  = ( LL_TIM_GetCounter ( TIM2 )+1)*4-1;
+////                        pSpeed_Mesa.fPreAngle = pSpeed_Mesa.fAngle;
+////                        pSpeed_Mesa.fAngleLast = pSpeed_Mesa.fAngle ;
+////											  ENCODER_M2._Super.wPulseNumber = TIM2->CNT;
+////											  ENCODER_M2.hmecAngle =  ENCODER_M2._Super.wPulseNumber ;
+////                        ENCODER_M2.hPremecAngle = ENCODER_M2.hmecAngle ;
+//                       
+//                    }
+
+//                }
+//								else  if(SetSpeedMotor2 < 0)
+//                {
+////									  HALL2_CC_First++;
+//                    if(HALL2_CC_First == 1)
+//                    {
+//                        Uart_TxBuffer_CNT = 0 ;
+//                        Uart_TxBuffer_CNT1 =0 ;
+//											  ENCODER_M2_DeltaElAngle = ENCODER_M2._Super.hElAngle - HAL_CommutationAngle2  ;
+//											
+//                       if(ENCODER_M2_DeltaElAngle<0)
+//											 {
+//											   ENCODER_M2_DeltaElAngle = ENCODER_M2_DeltaElAngle + 65536 ;
+//											 }
+//                        TIM2_CNT_Temp = ENCODER_M2_DeltaElAngle * ENCODER_M2.PulseNumber/ENCODER_M2._Super.bElToMecRatio/65536;
+
+//                        TIM2_CNT = TIM2->CNT;
+//                        TIM2->CNT = (u16)TIM2_CNT + TIM2_CNT_Temp ;
+
+//                        pSpeed_Mesa.fAngle  = ( LL_TIM_GetCounter ( TIM2 )+1)*4-1;
+//                        pSpeed_Mesa.fPreAngle = pSpeed_Mesa.fAngle;
+//                        pSpeed_Mesa.fAngleLast = pSpeed_Mesa.fAngle ;
+//											  ENCODER_M2._Super.wPulseNumber = TIM2->CNT;
+//											  ENCODER_M2.hmecAngle =  ENCODER_M2._Super.wPulseNumber ;
+//                        ENCODER_M2.hPremecAngle = ENCODER_M2.hmecAngle ;
+//                       
+//                    }
+
+//                }
+
+            }
+        }
+    }
+}
+
+/**
+  * @brief  This function handles second motor BRK interrupt.
+  * @param  None
+  * @retval None
+  */
+void TIMx_BRK_M2_IRQHandler(void)
+{
+    /* USER CODE BEGIN TIMx_BRK_M2_IRQn 0 */
+    R3_2_SwitchOffPWM( pwmcHandle[M1] );
+    R3_2_SwitchOffPWM( pwmcHandle[M2] );
+    /* USER CODE END TIMx_BRK_M1_IRQn 0 */
+//  if (LL_TIM_IsActiveFlag_BRK(PWM_Handle_M1.pParams_str->TIMx))
+
+    if ( LL_EXTI_ReadFlag_0_31(LL_EXTI_LINE_14) )
+    {
+//    LL_TIM_ClearFlag_BRK(PWM_Handle_M1.pParams_str->TIMx);
+        LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_14);
+        R3_2_BRK_IRQHandler(&PWM_Handle_M1);
+        R3_2_BRK_IRQHandler(&PWM_Handle_M2);
+    }
+    /* Systick is not executed due low priority so is necessary to call MC_Scheduler here.*/
+    MC_Scheduler();
+    /* USER CODE END TIMx_BRK_M2_IRQn 0 */
+
+//  if (LL_TIM_IsActiveFlag_BRK(PWM_Handle_M2.pParams_str->TIMx))
+//  {
+//    LL_TIM_ClearFlag_BRK(PWM_Handle_M2.pParams_str->TIMx);
+//    R3_2_BRK_IRQHandler(&PWM_Handle_M2);
+//  /* USER CODE BEGIN BRK */
+
+//  /* USER CODE END BRK */
+
+//  }
+//   /* Systick is not executed due low priority so is necessary to call MC_Scheduler here.*/
+//  MC_Scheduler();
+//  /* USER CODE BEGIN TIMx_BRK_M2_IRQn 1 */
+
+//  /* USER CODE END TIMx_BRK_M2_IRQn 1 */
+}
+
+/**
+  * @brief  This function handles TIMx global interrupt request for M2 Speed Sensor.
+  * @param  None
+  * @retval None
+  */
+void SPD_TIM_M2_IRQHandler(void)
+{
+    /* USER CODE BEGIN SPD_TIM_M2_IRQn 0 */
+
+    /* USER CODE END SPD_TIM_M2_IRQn 0 */
+
+    /* Encoder Timer UPDATE IT is dynamicaly enabled/disabled, checking enable state is required */
+    if (LL_TIM_IsEnabledIT_UPDATE (ENCODER_M2.TIMx) && LL_TIM_IsActiveFlag_UPDATE (ENCODER_M2.TIMx))
+    {
+        LL_TIM_ClearFlag_UPDATE(ENCODER_M2.TIMx);
+        ENC_IRQHandler(&ENCODER_M2);
+        /* USER CODE BEGIN M2 ENCODER_Update */
+
+        /* USER CODE END M2 ENCODER_Update   */
+    }
+    else
+    {
+        /* No other IT to manage for encoder config */
+    }
+    /* USER CODE BEGIN SPD_TIM_M2_IRQn 1 */
+
+    /* USER CODE END SPD_TIM_M2_IRQn 1 */
+}
+
+/* This section is present only when serial communication is used */
+/**
+  * @brief  This function handles USART interrupt request.
+  * @param  None
+  * @retval None
+  */
+
+extern UART_HandleTypeDef husart_debug;
+void USART_IRQHandler(void)
+{
+    if (LL_USART_IsActiveFlag_RXNE(husart_debug.Instance))
+    {
+        HAL_UART_IRQHandler(&husart_debug);
+    }
+
+
+    /* USER CODE BEGIN USART_IRQn 0 */
+//#ifdef (UART_DEBUG||Usart_Labview)
+//   HAL_UART_IRQHandler(&husart_debug);
+//
+////#endif
+////
+////#ifdef Usart_Labview
+////	 HAL_UART_IRQHandler(&husart_debug);
+//#else
+
+//  /* USER CODE END USART_IRQn 0 */
+////  if (LL_USART_IsActiveFlag_RXNE(pUSART.USARTx)) /* Valid data have been received */
+////  {
+////    uint16_t retVal;
+////    retVal = *(uint16_t*)(UFCP_RX_IRQ_Handler(&pUSART,LL_USART_ReceiveData8(pUSART.USARTx))); /* Flag 0 = RX */
+////    if (retVal == 1)
+////    {
+////      UI_SerialCommunicationTimeOutStart();
+////    }
+////    if (retVal == 2)
+////    {
+////      UI_SerialCommunicationTimeOutStop();
+////    }
+////  /* USER CODE BEGIN USART_RXNE */
+
+////  /* USER CODE END USART_RXNE  */
+////  }
+
+////  if (LL_USART_IsActiveFlag_TXE(pUSART.USARTx))
+////  {
+////    UFCP_TX_IRQ_Handler(&pUSART);
+////    /* USER CODE BEGIN USART_TXE */
+
+////    /* USER CODE END USART_TXE   */
+////  }
+////
+////  if (LL_USART_IsActiveFlag_ORE(pUSART.USARTx)) /* Overrun error occurs */
+////  {
+////    /* Send Overrun message */
+////    UFCP_OVR_IRQ_Handler(&pUSART);
+////    LL_USART_ClearFlag_ORE(pUSART.USARTx); /* Clear overrun flag */
+////    UI_SerialCommunicationTimeOutStop();
+////    /* USER CODE BEGIN USART_ORE */
+
+////    /* USER CODE END USART_ORE   */
+////  }
+////  /* USER CODE BEGIN USART_IRQn 1 */
+//#endif
+//  /* USER CODE END USART_IRQn 1 */
+}
+
+void USART3_IRQHandler(void)
+{
+//	if (LL_USART_IsActiveFlag_RXNE(huart3.Instance))
+//	{
+//	  HAL_UART_IRQHandler(&huart3);
+//	}
+
+    if (LL_USART_IsActiveFlag_RXNE(husart_debug.Instance))
+    {
+        HAL_UART_IRQHandler(&husart_debug);
+    }
+
+}
+/**
+  * @brief  This function handles Hard Fault exception.
+  * @param  None
+  * @retval None
+  */
+void HardFault_Handler(void)
+{
+    /* USER CODE BEGIN HardFault_IRQn 0 */
+
+    /* USER CODE END HardFault_IRQn 0 */
+    TSK_HardwareFaultTask();
+
+    /* Go to infinite loop when Hard Fault exception occurs */
+    while (1)
+    {
+        {
+            if (LL_USART_IsActiveFlag_ORE(pUSART.USARTx)) /* Overrun error occurs */
+            {
+                /* Send Overrun message */
+                UFCP_OVR_IRQ_Handler(&pUSART);
+                LL_USART_ClearFlag_ORE(pUSART.USARTx); /* Clear overrun flag */
+                UI_SerialCommunicationTimeOutStop();
+            }
+
+            if (LL_USART_IsActiveFlag_TXE(pUSART.USARTx))
+            {
+                UFCP_TX_IRQ_Handler(&pUSART);
+            }
+
+            if (LL_USART_IsActiveFlag_RXNE(pUSART.USARTx)) /* Valid data have been received */
+            {
+                uint16_t retVal;
+                retVal = *(uint16_t*)(UFCP_RX_IRQ_Handler(&pUSART,LL_USART_ReceiveData8(pUSART.USARTx)));
+                if (retVal == 1)
+                {
+                    UI_SerialCommunicationTimeOutStart();
+                }
+                if (retVal == 2)
+                {
+                    UI_SerialCommunicationTimeOutStop();
+                }
+            }
+            else
+            {
+            }
+        }
+    }
+    /* USER CODE BEGIN HardFault_IRQn 1 */
+
+    /* USER CODE END HardFault_IRQn 1 */
+
+}
+
+extern u8 Labview_uart_Flag,Labview_uart_Flag1;
+
+u8 Atlas_WriteRead_Flag=0;
+u32 led_1ms_cnt = 0;
+void SysTick_Handler(void)  //500us?¡äDD¨°?¡ä?
+{
+//HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_SET);
+#ifdef MC_HAL_IS_USED
+    static uint8_t SystickDividerCounter = SYSTICK_DIVIDER;
+    /* USER CODE BEGIN SysTick_IRQn 0 */
+// Usart_Labview_Analyze();
+    /* USER CODE END SysTick_IRQn 0 */
+    if (SystickDividerCounter == SYSTICK_DIVIDER)  //1ms
+    {
+        LWIP_CNT_1ms++;
+		 Countrer_1ms++;
+		 Countrer1_1ms++;
+        Countrer2_1ms++;
+			led_1ms_cnt++;
+		if(led_1ms_cnt%10==0)
+		{
+			DisplayErrorLed_Handle();
+		}
+        
+        HallStudyCNT++;
+        HallStudyCNT2++;
+        HAL_IncTick();
+        HAL_SYSTICK_IRQHandler();
+        SystickDividerCounter = 0;
+        Labview_uart_Flag ++;
+        Labview_uart_Flag1++;
+//		if(HallStudyFlag1 == 1)
+//		{
+////			MC_StartStopFlag = 0 ;
+//			HallState1 = (GPIOD->IDR>>12)&(0x7);
+//
+//			if(HallStudyCNT<Hall_EAC_Ticks)
+//			{
+//				Angle_Switch = 0;
+//
+//			}
+//			else
+//			{
+//			  HallStudyCNT = Hall_EAC_Ticks;
+//				Angle_Switch = 2;
+//			}
+//
+//		}
+//		else
+//		{
+//			HallStudyCNT = 0;
+//			Angle_Switch = 3;
+//		}
+        if(HallStudyFlag1 == 1)
+        {
+            Countrer_1ms = 0;
+            if(HallStudyCNT < Hall_EAC_Ticks)
+            {
+                Angle_Switch = 0;
+            }
+            else if(HallStudyCNT < 3*Hall_EAC_Ticks)
+            {
+                if(Hall_AvElAngle1CNT >=MotorParameters[M1].PolePairNum)
+                {
+                    if(Hall_AvElAngle1CNT == MotorParameters[M1].PolePairNum)
+                    {
+                        Hall_AvElAngle1 = (Hall_AvElAngle1Sum/Hall_AvElAngle1CNT);
+                        Hall_AvElAngle1Temp = (u16)Hall_AvElAngle1;
+                        HALL_M1.PhaseShift = Hall_AvElAngle1;
+                        HALL_PHASE_SHIFT = (s16)((u32)Hall_AvElAngle1Temp);
+                    }
+                    Hall_AvElAngle1CNT = MotorParameters[M1].PolePairNum+1;
+                    Hall_AvElAngle1Sum =0;
+//                    HALL_CC_First = 2;
+                    SetSpeedMotor1 = 0;
+                    Angle_Switch = 0;
+                    MC_StopMotor1();
+
+                }
+                else
+                {
+                    Angle_Switch = 2;
+                }
+            }
+            else
+            {
+                HallStudyFlag1 = 0;
+                HallStudyCNT = 0;
+                Hall_AvElAngle1CNT =0;
+                Hall_AvElAngle1Sum =0;
+                CurrentPosition1 =  MC_GetCurrentPosition1();
+                pPIDSpeed[M1]->wIntegralTerm = 0x00000000UL;
+                pPIDIq[M1]->wIntegralTerm = 0x00000000UL;
+                pPIDPosCtrl[M1]->wIntegralTerm = 0x00000000UL;
+                pPosCtrl[M1]->Theta = CurrentPosition1 ;
+                Angle_Switch = 3;
+							 ENCODER_M1.Angle_Compensation = 0 ;
+						  	HALL_CC_First = 0;
+//        ENCODER_M1._Super.wPulseNumber	= 0;
+            }
+
+        }
+        else if(HallStudyFlag1 == 2)//¡À¨¤???¡Â?¡ê¨º?
+        {
+            Countrer_1ms = 0;
+            if(HallStudyCNT < Hall_EAC_Ticks)
+            {
+                Angle_Switch = 0;
+            }
+            else
+            {
+                MC_StopMotor1();
+                HallStudyFlag1 = 0;
+                HallStudyCNT = 0;
+                Angle_Switch = 3;
+                ENCODER_M1._Super.wPulseNumber	= 0;
+                CurrentPosition1 =  MC_GetCurrentPosition1();
+						    ENCODER_M1.Angle_Compensation = 0 ;
+						  	HALL_CC_First = 2;
+
+            }
+            HALL_CH1_ValueOffset = HALL_CH1_ValueDelta1;
+        }
+        else
+        {
+            HallStudyCNT = 0;
+        }
+
+
+        if(HallStudyFlag2 == 1)
+        {
+            Countrer1_1ms = 0;
+            if(HallStudyCNT2 < Hall_EAC_Ticks)
+            {
+                Angle_Switch2 = 0;
+            }
+            else if(HallStudyCNT2 < 3*Hall_EAC_Ticks)
+            {
+                if(Hall_AvElAngle2CNT >=MotorParameters[M2].PolePairNum)
+                {
+                    if(Hall_AvElAngle2CNT == MotorParameters[M2].PolePairNum)
+                    {
+                        Hall_AvElAngle2 = (Hall_AvElAngle2Sum/Hall_AvElAngle2CNT);
+                        Hall_AvElAngle2Temp = (u16)Hall_AvElAngle2;
+                        HALL_PHASE_SHIFT2 = (s16)((u32)Hall_AvElAngle2Temp);
+                    }
+                    Hall_AvElAngle2CNT = MotorParameters[M2].PolePairNum+1;
+                    Hall_AvElAngle2Sum =0;
+//                    HALL2_CC_First = 0;
+                    SetSpeedMotor2 = 0;
+                    Angle_Switch2 = 0;
+                    MC_StopMotor2();
+
+                }
+                else
+                {
+                    Angle_Switch2 = 2;
+                }
+            }
+            else
+            {
+                HallStudyFlag2 = 0;
+                HallStudyCNT2 = 0;
+                Hall_AvElAngle2CNT =0;
+                Hall_AvElAngle2Sum =0;
+                CurrentPosition2 =  MC_GetCurrentPosition2();
+                pPIDSpeed[M2]->wIntegralTerm = 0x00000000UL;
+                pPIDIq[M2]->wIntegralTerm = 0x00000000UL;
+                pPIDPosCtrl[M2]->wIntegralTerm = 0x00000000UL;
+                pPosCtrl[M2]->Theta =CurrentPosition2 ;
+                Angle_Switch2 = 3;
+							  ENCODER_M2.Angle_Compensation = 0 ;
+							  HALL2_CC_First = 0;
+            }
+
+        }
+        else if(HallStudyFlag2 == 2)//¡À¨¤???¡Â?¡ê¨º?
+        {
+            Countrer1_1ms = 0;
+            if(HallStudyCNT2 < Hall_EAC_Ticks)
+            {
+                Angle_Switch2 = 0;
+            }
+            else
+            {
+                MC_StopMotor2();
+                HallStudyFlag2 = 0;
+                HallStudyCNT2 = 0;
+                Angle_Switch2 = 3;
+                ENCODER_M2._Super.wPulseNumber	= 0;
+                CurrentPosition2 =  MC_GetCurrentPosition2();
+                ENCODER_M2.Angle_Compensation = 0 ;
+							  HALL2_CC_First = 2;
+            }
+//            HALL_CH2_ValueOffset = HALL_CH2_ValueDelta1;
+
+        }
+        else
+        {
+            HallStudyCNT2 = 0;
+        }
+    }
+    else
+    {
+//			MPU6050_Read();
+//			MPU6050_Dataanl();
+//			MPU6050_DataPrepare();
+//	    IMUupdate(GyroFinal.X,GyroFinal.Y,GyroFinal.Z,AccFinal.X,AccFinal.Y,AccFinal.Z);
+
+//	      Atlas_Write_Flash(Atlas_Flash_Addr,FlashArray);
+
+//    		Atlas_Read_Flash(Atlas_Flash_Addr,FlashArray);
+
+    }
+    SystickDividerCounter ++;
+#endif /* MC_HAL_IS_USED */
+
+    /* USER CODE BEGIN SysTick_IRQn 1 */
+    /* USER CODE END SysTick_IRQn 1 */
+    MC_RunMotorControlTasks();
+
+    switch(Atlas_WriteRead_Flag)
+    {
+    case 0:
+
+
+        break;
+    case 1:
+
+        Atlas_Write_Flash(Atlas_Flash_Addr,FlashArray);
+        Atlas_WriteRead_Flag = 0;
+        break;
+
+    case 2:
+
+        Atlas_Read_Flash(Atlas_Flash_Addr,FlashArray);
+        Atlas_WriteRead_Flag = 0;
+        break;
+
+
+
+    }
+
+
+    /* USER CODE BEGIN SysTick_IRQn 2 */
+    /* USER CODE END SysTick_IRQn 2 */
+//	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_RESET);
+}
+
+/**
+  * @brief  This function handles Button IRQ on PIN PE0.
+  */
+u16 TestCounter=0,EMG_State,EMG_State2;
+extern int32_t SetSpeedMotor1,SetSpeedMotor2;
+void EXTI0_IRQHandler (void)
+{
+    /* USER CODE BEGIN START_STOP_BTN */
+    if ( LL_EXTI_ReadFlag_0_31(LL_EXTI_LINE_0) )
+    {
+
+		  EMG_State = (Start_Stop_GPIO_Port->IDR>>0)&(0x01);
+			if(EMG_State == 0)
+			{
+        for(u16 i=0; i<10000; i++);
+        EMG_State2 = (Start_Stop_GPIO_Port->IDR>>0)&(0x01);
+        EMG_State = (Start_Stop_GPIO_Port->IDR>>0)&(0x01);
+				if(EMG_State == 0)
+				{
+					SetSpeedMotor1 = 0;
+					SetSpeedMotor2 = 0;
+					TestCounter++;
+				}
+			}
+			
+			
+        LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_0);
+
+//		if(EMG_State == EMG_State2)
+//		{
+//			if(EMG_State2 == 0)
+//			{
+//				MC_StartMotor1();
+//				MC_StartMotor2();
+//				MC_ProgramSpeedRampMotor1( SetSpeedMotor1, 500 );
+//				MC_ProgramSpeedRampMotor2( SetSpeedMotor2, 500 );
+//			}
+//			else
+//			{
+//				MC_ProgramSpeedRampMotor1( 0, 0 );
+//				MC_ProgramSpeedRampMotor2( 0, 0 );
+//				MC_StopMotor1();
+//				MC_StopMotor2();
+//			}
+//	  }
+
+
+//		EMG_State = (GPIOE->IDR>>3)&(0x01);
+//		for(u16 i=0;i<10000;i++);
+//		EMG_State2 = (GPIOE->IDR>>3)&(0x01);
+//
+//		if(EMG_State == EMG_State2)
+//		{
+//			TestCounter++;
+//			LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_3);
+//			UI_HandleStartStopButton_cb ();
+//
+//			if (MC_GetSTMStateMotor1() == IDLE)
+//			{
+//				/* Ramp parameters should be tuned for the actual motor */
+//				if(EMG_State == 0)
+//				{
+//					MC_StartMotor1();
+//					MC_StartMotor2();
+//				}
+//			}
+//			else
+//			{
+//		//		MC_ProgramSpeedRampMotor1( 0, 0 );
+//		//		MC_ProgramSpeedRampMotor2( 0, 0 );
+//				MC_StopMotor1();
+//				MC_StopMotor2();
+//			}
+//
+//		}
+    }
+
+}
+
+
+
+void EXTI9_5_IRQHandler(void)
+{
+    if ( LL_EXTI_ReadFlag_0_31(LL_EXTI_LINE_5|LL_EXTI_LINE_6|LL_EXTI_LINE_7) )
+    {
+        HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_5);
+        HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
+        HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
+        LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_5);
+        LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_6);
+        LL_EXTI_ClearFlag_0_31 (LL_EXTI_LINE_7);
+    }
+}
+/* USER CODE BEGIN 1 */
+void EXTI15_10_IRQHandler(void)
+{
+    /* USER CODE BEGIN EXTI15_10_IRQn 0 */
+
+    /* USER CODE END EXTI15_10_IRQn 0 */
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_10);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_11);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_12);
+    /* USER CODE BEGIN EXTI15_10_IRQn 1 */
+    /* USER CODE END EXTI15_10_IRQn 1 */
+}
+
+u8 HALL_GetPhase2(void)
+{
+    int32_t tmp = 0;
+    tmp |= HAL_GPIO_ReadPin(M2_HALL_W_GPIO_Port, M2_HALL_W_Pin);//U(A)
+    tmp <<= 1;
+    tmp |= HAL_GPIO_ReadPin(M2_HALL_V_GPIO_Port, M2_HALL_V_Pin);//V(B)
+    tmp <<= 1;
+    tmp |= HAL_GPIO_ReadPin(M2_HALL_U_GPIO_Port, M2_HALL_U_Pin);//W(C)
+    return (u8)(tmp & 0x0007); // ????????
+}
+
+u8 HALL_GetPhase1(void)
+{
+    int32_t tmp = 0;
+
+    tmp |= HAL_GPIO_ReadPin(M1_HALL_W_GPIO_Port, M1_HALL_W_Pin);//U(A)
+    tmp <<= 1;
+    tmp |= HAL_GPIO_ReadPin(M1_HALL_V_GPIO_Port, M1_HALL_V_Pin);//V(B)
+    tmp <<= 1;
+    tmp |= HAL_GPIO_ReadPin(M1_HALL_U_GPIO_Port, M1_HALL_U_Pin);//W(C)
+
+//	  tmp = 7 - tmp ;
+    return (u8)(tmp & 0x0007); // ????????
+}
+
+/* USER CODE END 1 */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+/******************* (C) COPYRIGHT 2019 STMicroelectronics *****END OF FILE****/

@@ -1,0 +1,1305 @@
+#include "Usart_Labview.h"
+#include "public_global.h"
+
+char str_table[Rec_Num][Rec_Len];  //óDD§êy?Y?o′?
+u8 UsartReceiveDate = 0;
+u8 UsartRxBuffer[50] = {0};    //?óê?Buffer
+
+u8 UsartTxBuffer[50] = {0};    //·￠?íBuffer
+u8 Labview_uart_Flag_CNT = 8;
+long Lab_RxDate[20] = {0};    //?óê?êy?Y′|àí
+u8 TempID1 = 0,TempID2 = 0,TempID3 = 0,TempID4 = 0;
+u8 UsartState = 0;
+u8 P_V_I_Switch = 0;
+extern  u8 Motor_Judgment_Temp;
+extern HALL_Handle_t HALL_M1;
+long TempSpeedMotor1=0,TempSpeedMotor2=0;
+extern LOAD_CURR	loadCurr[NUMBER_OF_AXES];
+extern MotorParameters_t MotorParameters[NBR_OF_MOTORS];
+
+extern void MotorParametersM1_Init(void);
+extern void MotorParametersM2_Init(void);
+
+void Usart_Labview_Analyze(void)
+{
+    int i,jj;
+    switch (UsartState)
+    {
+    case 0x00:   //判断帧头帧尾
+        if(UsartReceiveDate>100)
+        {
+            UsartState = 0x00;
+            UsartReceiveDate = 0;
+            memset(UsartRxBuffer,0,sizeof(UsartRxBuffer));  //清除缓存
+        }
+        else if((UsartRxBuffer[0] == 0xAA) && (UsartRxBuffer[UsartReceiveDate-1] == 0x2F))
+        {
+            UsartState = 0xFF;
+        }
+        break;
+    case 0xFF:  //判断校验位
+        if(UsartRxBuffer[UsartReceiveDate-2] == UsartReceiveDate)
+        {
+            UsartState = UsartRxBuffer[1];
+        }
+        else
+        {
+            UsartState = 0x00;
+            UsartReceiveDate = 0;
+            memset(UsartRxBuffer,0,sizeof(UsartRxBuffer));  //清除缓存
+        }
+        break;
+    case 0xFE:  //清除缓存
+        UsartState = 0x00;
+        UsartReceiveDate = 0;
+        memset(UsartRxBuffer,0,sizeof(UsartRxBuffer));  //清除缓存
+        break;
+    case 0x01:   //电机1参数读取指令（电机1基本参数、电机1保护参数、电机1PID参数）
+        /**********************读取电机1基本配置参数*****************************/
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x81;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+2] = (*PARAMETER[95].lpParam>>(i*8))&0xFF;//极对数
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+6] = (*PARAMETER[96].lpParam>>(i*8))&0xFF;//力矩常数！
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+10] = (*PARAMETER[97].lpParam>>(i*8))&0xFF;//电机惯量！
+        }
+
+        TempSpeedMotor1 = *PARAMETER[98].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+14] = (TempSpeedMotor1>>(i*8))&0xFF;//额定电流
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+18] = (*PARAMETER[99].lpParam>>(i*8))&0xFF;//额定转矩
+        }
+        TempSpeedMotor1 = *PARAMETER[100].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+22] = (TempSpeedMotor1>>(i*8))&0xFF;//额定转速
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+26] = (*PARAMETER[101].lpParam>>(i*8))&0xFF;//编码器分辨率
+        }
+//				UsartTxBuffer[30] = 0x2F;
+//				HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],31,0xffff);
+//	      for(jj=0;jj<1000000;jj++)             //延时
+//				{
+//				}
+//	     /***********************读取电机1保护参数***20201008***********************/
+//		    UsartTxBuffer[0] = 0xAA;
+//				UsartTxBuffer[1] = 0x82;
+
+        TempSpeedMotor1 = *PARAMETER[102].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+30] = (TempSpeedMotor1>>(i*8))&0xFF;//峰值电流！
+        }
+
+
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+34] = (*PARAMETER[103].lpParam>>(i*8))&0xFF;//峰值时间！
+        }
+
+        TempSpeedMotor1 = *PARAMETER[104].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+38] = (TempSpeedMotor1>>(i*8))&0xFF;//最大相电流
+        }
+        TempSpeedMotor1 = *PARAMETER[33].lpParam*0.6;
+        TempSpeedMotor1 = *PARAMETER[105].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+42] = (TempSpeedMotor1>>(i*8))&0xFF;//最大速度
+        }
+        TempSpeedMotor1 = *PARAMETER[106].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+46] = (TempSpeedMotor1>>(i*8))&0xFF;//堵转速度！
+        }
+
+        TempSpeedMotor1 = *PARAMETER[107].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+50] = (TempSpeedMotor1>>(i*8))&0xFF;//堵转电流！
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+54] = (*PARAMETER[108].lpParam>>(i*8))&0xFF;//堵转时间！
+        }
+//				UsartTxBuffer[30] = 0x2F;
+//				HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],31,0xffff);
+//				for(jj=0;jj<1000000;jj++)     //?óê±
+//				{
+//				}
+//      /******************************读取电机1PID参数*******************************/
+//				UsartTxBuffer[0] = 0xAA;
+//				UsartTxBuffer[1] = 0x83;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+58] = (*PARAMETER[9].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+62] = (*PARAMETER[10].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+66] = (*PARAMETER[7].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+70] = (*PARAMETER[8].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+74] = (*PARAMETER[1].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+78] = (*PARAMETER[2].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+82] = (*PARAMETER[3].lpParam>>(i*8))&0xFF;
+        }
+        UsartTxBuffer[86] = (int8_t)(*PARAMETER[49].lpParam);    //PLL开关状态增加！
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+87] = (*PARAMETER[60].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+91] = (*PARAMETER[61].lpParam>>(i*8))&0xFF;
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+95] = (*PARAMETER[91].lpParam>>(i*8))&0xFF; //PLL_DIV
+        }
+        UsartTxBuffer[43] = 0x2F;
+        HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],100,0xffff);
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x02:   //电机2参数读取指令（电机2基本参数、电机2保护参数、电机2PID参数）
+        /******************************读取电机2基本配置参数*****************************/
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x84;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+2] = (*PARAMETER[109].lpParam>>(i*8))&0xFF;//极对数
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+6] = (*PARAMETER[110].lpParam>>(i*8))&0xFF;//力矩常数！
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+10] = (*PARAMETER[111].lpParam>>(i*8))&0xFF;//电机惯量！
+        }
+
+
+        TempSpeedMotor2 = *PARAMETER[112].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+14] = (TempSpeedMotor2>>(i*8))&0xFF;//额定电流
+        }
+
+
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+18] = (*PARAMETER[113].lpParam>>(i*8))&0xFF;//额定转矩
+        }
+        TempSpeedMotor2 = *PARAMETER[114].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+22] = (TempSpeedMotor2>>(i*8))&0xFF;//额定转速
+        }
+        for(i=0; i<4; i++)
+        {
+//					UsartTxBuffer[i+26] = (*PARAMETER[89].lpParam>>(i*8))&0xFF;//编码器分辨率
+            UsartTxBuffer[i+26] = (*PARAMETER[115].lpParam>>(i*8))&0xFF;
+        }
+        UsartTxBuffer[30] = 0x2F;
+        HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],31,0xffff);
+        memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        for(jj=0; jj<1000000; jj++)   //延时
+        {
+        }
+        /*******************************读取电机2保护参数******************************/
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x85;
+        TempSpeedMotor2 = *PARAMETER[116].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+2] = (TempSpeedMotor2>>(i*8))&0xFF;//峰值电流！
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+6] = (*PARAMETER[117].lpParam>>(i*8))&0xFF;//峰值时间！
+        }
+
+        TempSpeedMotor2 = *PARAMETER[118].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+10] = (TempSpeedMotor2>>(i*8))&0xFF;//最大相电流
+        }
+
+        TempSpeedMotor2 = *PARAMETER[38].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+14] = (TempSpeedMotor2>>(i*8))&0xFF;//最大速度
+        }
+
+        TempSpeedMotor2 = *PARAMETER[120].lpParam*0.6;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+18] = (TempSpeedMotor2>>(i*8))&0xFF;//堵转速度
+        }
+
+        TempSpeedMotor2 = *PARAMETER[121].lpParam/1.191;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+22] = (TempSpeedMotor2>>(i*8))&0xFF;//堵转电流
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+26] = (*PARAMETER[122].lpParam>>(i*8))&0xFF;//堵转时间
+        }
+        UsartTxBuffer[30] = 0x2F;
+        HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],31,0xffff);
+        memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        for(jj=0; jj<1000000; jj++)     //延时
+        {
+        }
+        /*********************读取电机2PID参数********************************/
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x86;
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+2] = (*PARAMETER[19].lpParam>>(i*8))&0xFF;  //P_current
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+6] = (*PARAMETER[20].lpParam>>(i*8))&0xFF;  //I_current
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+10] = (*PARAMETER[17].lpParam>>(i*8))&0xFF; //P_speed
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+14] = (*PARAMETER[18].lpParam>>(i*8))&0xFF; //I_speed
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+18] = (*PARAMETER[11].lpParam>>(i*8))&0xFF;  //P_position
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+22] = (*PARAMETER[12].lpParam>>(i*8))&0xFF;  //I_position
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+26] = (*PARAMETER[13].lpParam>>(i*8))&0xFF;  //D_position
+        }
+        UsartTxBuffer[30] = (int8_t)(*PARAMETER[49].lpParam);    //PLL开关状态增加！
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+31] = (*PARAMETER[58].lpParam>>(i*8))&0xFF; //PLL_P
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+35] = (*PARAMETER[59].lpParam>>(i*8))&0xFF; //PLL_I
+        }
+        for(i=0; i<4; i++)
+        {
+            UsartTxBuffer[i+39] = (*PARAMETER[90].lpParam>>(i*8))&0xFF; //PLL_DIV
+        }
+        UsartTxBuffer[43] = 0x2F;
+        HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],44,0xffff);
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x03:  //监控参数读取指令
+        RefreshCmd_Type = 1;
+        UsartState = 0xFE;
+        break;
+    case 0x04: //使能指令
+        if(UsartRxBuffer[2] == 0x01 )
+        {
+            MC_StartStopFlag = 2;
+            Motor_Judgment = 1;
+        }
+        else if(UsartRxBuffer[2] == 0x02)
+        {
+            MC_StartStopFlag = 2;
+            Motor_Judgment = 2;
+        }
+        else if(UsartRxBuffer[2] == 0x03)
+        {
+            MC_StartStopFlag = 2;
+            Motor_Judgment = 3;
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x05: //去使能指令
+        if(UsartRxBuffer[2] == 0x01 )
+        {
+            MC_StartStopFlag = 4;    //待定
+            Motor_Judgment = 1;
+        }
+        else if(UsartRxBuffer[2] == 0x02)
+        {
+            MC_StartStopFlag = 4;    //待定
+            Motor_Judgment = 2;
+        }
+        else if(UsartRxBuffer[2] == 0x03)
+        {
+            MC_StartStopFlag = 4;    //待定
+            Motor_Judgment = 3;
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x06://电机急停指令
+        if(UsartRxBuffer[2] == 0x01 )
+        {
+            MC_StartStopFlag = 3;
+            Motor_Judgment = 1;
+        }
+        else if(UsartRxBuffer[2] == 0x02)
+        {
+            MC_StartStopFlag = 3;
+            Motor_Judgment = 2;
+        }
+        else if(UsartRxBuffer[2] == 0x03)
+        {
+            MC_StartStopFlag = 3;
+            Motor_Judgment = 3;
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x07://电机换向指令
+        if(UsartRxBuffer[2] == 0x01 )  //电机1换向模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                HallStudyFlag1 = 2;	//编码器模式
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                HallStudyFlag1 = 1;  //霍尔学习模式
+            }
+        }
+        else if(UsartRxBuffer[2] == 0x02)   //电机2换向模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                HallStudyFlag2 = 2;
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                HallStudyFlag2 = 1;
+            }
+        }
+        else if(UsartRxBuffer[2] == 0x03) //电机1和2换向模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                HallStudyFlag1 = 2;
+                HallStudyFlag2 = 2;
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                HallStudyFlag1 = 1;
+                HallStudyFlag2 = 1;
+            }
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x08://电机运行模式
+        if(UsartRxBuffer[2] == 0x01 )   //电机1运行模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                Motor_Judgment = 1;
+                MC_StartStopFlag = 5;
+                P_V_I_Switch = 1;
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                Motor_Judgment = 1;
+                Motor_Judgment_Temp = Motor_Judgment;
+                P_V_I_Switch = 2;
+                MC_StartStopFlag = 8;
+//							SetSpeedMotor1 = 0;
+//							MC_ProgramSpeedRampMotor1( SetSpeedMotor1, 100 );
+//							MC_StartStopFlag = 6;
+            }
+            else if(UsartRxBuffer[3] == 0x03)
+            {
+                Motor_Judgment = 1;
+//                Motor_Judgment_Temp = Motor_Judgment;
+//							SetSpeedMotor1 = 0;
+//							MC_ProgramSpeedRampMotor1( SetSpeedMotor1, 100 );
+//		          MC_StartStopFlag = 7;
+                P_V_I_Switch = 3;
+                MC_StartStopFlag = 8;
+            }
+        }
+        else if(UsartRxBuffer[2] == 0x02)  //电机2运行模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                Motor_Judgment = 2;
+                MC_StartStopFlag = 5;
+							 P_V_I_Switch = 1;
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                Motor_Judgment = 2;
+                P_V_I_Switch = 2;
+                MC_StartStopFlag = 8;
+            }
+            else if(UsartRxBuffer[3] == 0x03)
+            {
+                Motor_Judgment = 2;
+							  P_V_I_Switch = 3;
+                MC_StartStopFlag = 8;
+//                MC_StartStopFlag = 7;
+//                SetPulseMotor2=  MC_GetCurrentPosition2();
+//							SetPulseMotor2 = CurrentPosition2;
+            }
+        }
+        else if(UsartRxBuffer[2] == 0x03)  ////电机1&2运行模式选择
+        {
+            if(UsartRxBuffer[3] == 0x01)
+            {
+                Motor_Judgment = 3;
+
+                MC_StartStopFlag = 5;
+							 P_V_I_Switch = 1;
+            }
+            else if(UsartRxBuffer[3] == 0x02)
+            {
+                Motor_Judgment = 3;
+
+//                MC_StartStopFlag = 6;
+							 P_V_I_Switch = 2;
+                MC_StartStopFlag = 8;
+            }
+            else if(UsartRxBuffer[3] == 0x03)
+            {
+                Motor_Judgment = 3;
+//                MC_StartStopFlag = 7;
+							 P_V_I_Switch = 3;
+                MC_StartStopFlag = 8;
+            }
+        }
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x09://报警清除
+        MC_AcknowledgeFaultMotor1();
+        MC_AcknowledgeFaultMotor2();
+        RefreshCmd_Type = 1;
+        UsartState = 0xFE;
+        break;
+    case 0x0A: //独立参数读取
+        if(UsartRxBuffer[2] == 0)//读取ID
+        {
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[UsartRxBuffer[3]].lpParam>>(i*8))&0xFF;   //ID数据发送
+            }
+            UsartTxBuffer[0] = 0xAA;
+            UsartTxBuffer[1] = 0x8A;
+            UsartTxBuffer[6] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],7,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        }
+        else if(UsartRxBuffer[2] == 1)//写入ID
+        {
+            *PARAMETER[UsartRxBuffer[3]].lpParam = Usart_ReadRegValue(UsartRxBuffer,4);
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x0B: //读取力矩参数
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x87;
+        switch (UsartRxBuffer[2])
+        {
+        case 0x01 :
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[50].lpParam>>(i*8))&0xFF;//电机1目标力矩
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[53].lpParam>>(i*8))&0xFF;//电机2目标力矩
+            }
+            UsartTxBuffer[10] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],11,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+            break;
+        case 0x02:
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[50].lpParam>>(i*8))&0xFF;//电机2目标力矩
+
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[53].lpParam>>(i*8))&0xFF;//电机2目标力矩
+            }
+            UsartTxBuffer[10] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],11,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+            break;
+        case 0x03:  //!!!待定
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[50].lpParam>>(i*8))&0xFF;//电机1目标力矩
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[53].lpParam>>(i*8))&0xFF;//电机2目标力矩
+            }
+            UsartTxBuffer[10] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],11,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+            break;
+        default:
+            break;
+        }
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x0C:  //读取速度参数
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x88;
+        if(MC_StartStopFlag == 6)
+        {
+            TempSpeedMotor1 = (long)((float)(*PARAMETER[27].lpParam*0.6) +0.5);
+            TempSpeedMotor2 = (long)((float)(*PARAMETER[30].lpParam*0.6) +0.5);
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (TempSpeedMotor1>>(i*8))&0xFF;//电机1目标速度
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[29].lpParam>>(i*8))&0xFF;//电机1目标时间
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+10] = (TempSpeedMotor2>>(i*8))&0xFF;//电机2目标速度
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+14] = (*PARAMETER[32].lpParam>>(i*8))&0xFF;//电机2目标时间 改20201207
+            }
+            UsartTxBuffer[18] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],19,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+
+    case 0x0D:  //读取位置参数
+        UsartTxBuffer[0] = 0xAA;
+        UsartTxBuffer[1] = 0x89;
+        if(MC_StartStopFlag == 7)
+        {
+            SetPulseMotor1 = (long)(SetPositionMotor1*M1_ENCODER_PPR*16/RAD_PULSE);
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[21].lpParam>>(i*8))&0xFF;//电机1目标位置
+            }
+            TempSpeedMotor1 = (*PARAMETER[6].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (TempSpeedMotor1>>(i*8))&0xFF;//电机1目标速度
+            }
+            TempSpeedMotor1 = (*PARAMETER[4].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+10] = (TempSpeedMotor1>>(i*8))&0xFF;//电机1目标加速度
+            }
+            TempSpeedMotor1 = (*PARAMETER[5].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+14] = (TempSpeedMotor1>>(i*8))&0xFF;//电机1目标减速度
+            }
+
+            SetPulseMotor2 = SetPositionMotor2*M2_ENCODER_PPR*16/RAD_PULSE;
+
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+18] = (*PARAMETER[24].lpParam>>(i*8))&0xFF;//电机2目标位置
+            }
+            TempSpeedMotor2 = (*PARAMETER[16].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+22] = (TempSpeedMotor2>>(i*8))&0xFF;//电机2目标速度
+            }
+            TempSpeedMotor2 = (*PARAMETER[14].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+26] = (TempSpeedMotor2>>(i*8))&0xFF;//电机2目标加速度
+            }
+            TempSpeedMotor2 = (*PARAMETER[15].lpParam)*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+30] = (TempSpeedMotor2>>(i*8))&0xFF;//电机2目标减速度
+            }
+
+            UsartTxBuffer[34] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],35,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+
+
+
+        break;
+    case 0x0E:   //未起作用，暂留
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x11:   //设置电机1基本配置参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i); //接收数据处理
+        }
+//					  *PARAMETER[95].lpParam = Lab_RxDate[0]; //极对数
+////						EncAlignCtrlM1.bElToMecRatio = Lab_RxDate[0];
+////						ENCODER_M1._Super.bElToMecRatio = Lab_RxDate[0];
+////						HALL_M1._Super.bElToMecRatio = Lab_RxDate[0];
+//
+//						*PARAMETER[96].lpParam = Lab_RxDate[1];  //力矩常数
+//						*PARAMETER[97].lpParam = Lab_RxDate[2];  //电机惯量
+//						*PARAMETER[98].lpParam = (long)(Lab_RxDate[3]*1.191);//额定电流
+////						loadCurr[0].cmpVal[0] =(long)(MotorParameters[i].RatedCurrent*157/100);//1.57 15000/9528;			// 1.259
+////						loadCurr[0].cmpVal[1] = (long)((float)MotorParameters[i].RatedCurrent*1.99);//19000;			// 1.42
+////						loadCurr[0].cmpVal[2] = (long)((float)MotorParameters[i].RatedCurrent*2.2);//21000;					// 1.6
+////						loadCurr[0].cmpVal[3] = (long)((float)MotorParameters[i].RatedCurrent*2.36);//22500;			// 1.76
+////						loadCurr[0].cmpVal[4] = (long)((float)MotorParameters[i].RatedCurrent*2.57);//23500;					// 1.8888
+////						loadCurr[0].cmpVal[5] = (long)((float)MotorParameters[i].RatedCurrent*2.466);//24500;
+//
+//
+//						*PARAMETER[99].lpParam = Lab_RxDate[4];  //额定转矩
+//						*PARAMETER[100].lpParam = Lab_RxDate[5]/0.6;  //额定转速
+//						*PARAMETER[101].lpParam = Lab_RxDate[6]; //编码器分辨率
+
+        *PARAMETER[95].lpParam = Lab_RxDate[0]; //极对数
+        *PARAMETER[96].lpParam = Lab_RxDate[1];  //力矩常数
+        *PARAMETER[97].lpParam = Lab_RxDate[2];  //电机惯量
+        *PARAMETER[98].lpParam = (long)(Lab_RxDate[3]);//额定电流
+        *PARAMETER[99].lpParam = Lab_RxDate[4];  //额定转矩
+        *PARAMETER[100].lpParam = Lab_RxDate[5];  //额定转速
+        *PARAMETER[101].lpParam = Lab_RxDate[6]; //编码器分辨率
+        MotorParametersM1_Init();
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x12:   //设置电机1保护参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i);
+        }
+//					*PARAMETER[102].lpParam = (long)(Lab_RxDate[0]*1.191);  //峰值电流
+//					*PARAMETER[103].lpParam = Lab_RxDate[1];  //峰值时间
+//					*PARAMETER[104].lpParam = Lab_RxDate[2]; //最大相电流
+//					*PARAMETER[33].lpParam = Lab_RxDate[3]/0.6;	//最大速度
+//					*PARAMETER[106].lpParam = Lab_RxDate[4]/0.6;  //堵转速度
+//					*PARAMETER[107].lpParam = (long)(Lab_RxDate[5]*1.191);  //堵转电流
+//					*PARAMETER[108].lpParam = Lab_RxDate[6];  //堵转时间
+
+        *PARAMETER[102].lpParam = (long)(Lab_RxDate[0]);  //峰值电流
+        *PARAMETER[103].lpParam = Lab_RxDate[1];  //峰值时间
+        *PARAMETER[104].lpParam = Lab_RxDate[2]; //最大相电流
+        *PARAMETER[105].lpParam = Lab_RxDate[3];	//最大速度
+        *PARAMETER[106].lpParam = Lab_RxDate[4];  //堵转速度
+        *PARAMETER[107].lpParam = (long)(Lab_RxDate[5]);  //堵转电流
+        *PARAMETER[108].lpParam = Lab_RxDate[6];  //堵转时间
+
+        MotorParametersM1_Init();
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x13:   //设置电机1PID参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i);
+        }
+        Lab_RxDate[7] = UsartRxBuffer[30];        //PLL开关
+        Lab_RxDate[8] = Usart_ReadRegValue(UsartRxBuffer,31);
+        Lab_RxDate[9] = Usart_ReadRegValue(UsartRxBuffer,35);
+        Lab_RxDate[10] = Usart_ReadRegValue(UsartRxBuffer,39);
+        *PARAMETER[9].lpParam = Lab_RxDate[0];  //Kp_Iq
+        *PARAMETER[10].lpParam = Lab_RxDate[1]; //Ki_Iq
+        *PARAMETER[7].lpParam = Lab_RxDate[2];  //Kp_Speed
+        *PARAMETER[8].lpParam = Lab_RxDate[3];	//Ki_Speed
+        *PARAMETER[1].lpParam = Lab_RxDate[4];  //Kp_Position
+        *PARAMETER[2].lpParam = Lab_RxDate[5];  //Ki_Position
+        *PARAMETER[3].lpParam = Lab_RxDate[6];  //Kd_Position
+        *PARAMETER[49].lpParam = Lab_RxDate[7];  //PLL开关        待定
+        *PARAMETER[60].lpParam = Lab_RxDate[8];  //Kp_PLL
+        *PARAMETER[61].lpParam = Lab_RxDate[9];  //Kd_PLL
+        *PARAMETER[91].lpParam = Lab_RxDate[10]; //DIV_PLL
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x14:    //设置电机2基本配置参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i);
+        }
+//					*PARAMETER[109].lpParam = Lab_RxDate[0]; //极对数
+//					EncAlignCtrlM2.bElToMecRatio = Lab_RxDate[0];
+//					ENCODER_M2._Super.bElToMecRatio = Lab_RxDate[0];
+////					HALL_M1.bElToMecRatio = Lab_RxDate[0];
+//
+//					*PARAMETER[110].lpParam = Lab_RxDate[1];  //力矩常数
+//					*PARAMETER[111].lpParam = Lab_RxDate[2];  //电机惯量
+//
+//					*PARAMETER[112].lpParam = (long)(Lab_RxDate[3]*1.191);	//额定电流
+//					loadCurr[1].cmpVal[0] = MotorParameters[i].RatedCurrent*1.57;//15000/9528;			// 1.259
+//					loadCurr[1].cmpVal[1] = MotorParameters[i].RatedCurrent*1.99;//19000;			// 1.42
+//					loadCurr[1].cmpVal[2] = MotorParameters[i].RatedCurrent*2.2;//21000;					// 1.6
+//					loadCurr[1].cmpVal[3] = MotorParameters[i].RatedCurrent*2.36;//22500;			// 1.76
+//					loadCurr[1].cmpVal[4] = MotorParameters[i].RatedCurrent*2.57;//23500;					// 1.8888
+//					loadCurr[1].cmpVal[5] = MotorParameters[i].RatedCurrent*2.466;//24500;
+//
+//					*PARAMETER[113].lpParam = Lab_RxDate[4];  //额定转矩
+//					*PARAMETER[114].lpParam = Lab_RxDate[5]/0.6;  //额定转速
+//					*PARAMETER[115].lpParam = Lab_RxDate[6]; //编码器分辨率
+
+        *PARAMETER[109].lpParam = Lab_RxDate[0]; //极对数
+        *PARAMETER[110].lpParam = Lab_RxDate[1];  //力矩常数
+        *PARAMETER[111].lpParam = Lab_RxDate[2];  //电机惯量
+        *PARAMETER[112].lpParam = (long)(Lab_RxDate[3]*1.191);	//额定电流
+//					loadCurr[1].cmpVal[0] = MotorParameters[i].RatedCurrent*1.57;//15000/9528;			// 1.259
+//					loadCurr[1].cmpVal[1] = MotorParameters[i].RatedCurrent*1.99;//19000;			// 1.42
+//					loadCurr[1].cmpVal[2] = MotorParameters[i].RatedCurrent*2.2;//21000;					// 1.6
+//					loadCurr[1].cmpVal[3] = MotorParameters[i].RatedCurrent*2.36;//22500;			// 1.76
+//					loadCurr[1].cmpVal[4] = MotorParameters[i].RatedCurrent*2.57;//23500;					// 1.8888
+//					loadCurr[1].cmpVal[5] = MotorParameters[i].RatedCurrent*2.466;//24500;
+
+        *PARAMETER[113].lpParam = Lab_RxDate[4];  //额定转矩
+        *PARAMETER[114].lpParam = Lab_RxDate[5];  //额定转速
+        *PARAMETER[115].lpParam = Lab_RxDate[6]; //编码器分辨率
+
+        MotorParametersM2_Init();
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x15:     //设置电机2保护参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i);
+        }
+//					*PARAMETER[116].lpParam = (long)(Lab_RxDate[0]*1.191);  //峰值电流
+//					*PARAMETER[117].lpParam = Lab_RxDate[1];  //峰值时间
+//					*PARAMETER[118].lpParam = Lab_RxDate[2]; //最大相电流
+//					*PARAMETER[38].lpParam = Lab_RxDate[3]/0.6;	//最大速度
+//					*PARAMETER[120].lpParam = Lab_RxDate[4]/0.6;  //堵转速度
+//					*PARAMETER[121].lpParam = (long)(Lab_RxDate[5]*1.191);  //堵转电流
+//					*PARAMETER[122].lpParam = Lab_RxDate[6];  //堵转时间
+
+        *PARAMETER[116].lpParam = (long)(Lab_RxDate[0]);  //峰值电流
+        *PARAMETER[117].lpParam = Lab_RxDate[1];  //峰值时间
+        *PARAMETER[118].lpParam = Lab_RxDate[2]; //最大相电流
+        *PARAMETER[38].lpParam = Lab_RxDate[3];	//最大速度
+        *PARAMETER[120].lpParam = Lab_RxDate[4];  //堵转速度
+        *PARAMETER[121].lpParam = (long)(Lab_RxDate[5]);  //堵转电流
+        *PARAMETER[122].lpParam = Lab_RxDate[6];  //堵转时间
+
+        MotorParametersM2_Init();
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x16:      //设置电机2PID参数
+        for(i=0; i<7; i++)
+        {
+            Lab_RxDate[i] = Usart_ReadRegValue(UsartRxBuffer,2+4*i);
+        }
+        Lab_RxDate[7] = UsartRxBuffer[30];        //PLL开关
+        Lab_RxDate[8] = Usart_ReadRegValue(UsartRxBuffer,31);
+        Lab_RxDate[9] = Usart_ReadRegValue(UsartRxBuffer,35);
+        Lab_RxDate[10] = Usart_ReadRegValue(UsartRxBuffer,39);
+        *PARAMETER[19].lpParam = Lab_RxDate[0];  //Kp_Iq
+        *PARAMETER[20].lpParam = Lab_RxDate[1]; //Ki_Iq
+        *PARAMETER[17].lpParam = Lab_RxDate[2];  //Kp_Speed
+        *PARAMETER[18].lpParam = Lab_RxDate[3];	//Ki_Speed
+        *PARAMETER[11].lpParam = Lab_RxDate[4];  //Kp_Position
+        *PARAMETER[12].lpParam = Lab_RxDate[5];  //Ki_Position
+        *PARAMETER[13].lpParam = Lab_RxDate[6];  //Kd_Position
+        *PARAMETER[49].lpParam = Lab_RxDate[7];  //PLL开关        待定
+        *PARAMETER[58].lpParam = Lab_RxDate[8];  //Kp_PLL
+        *PARAMETER[59].lpParam = Lab_RxDate[9];  //Kd_PLL
+        *PARAMETER[90].lpParam = Lab_RxDate[10];  //DIV_PLL
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x17:      //设置电机力矩参数
+        if(UsartRxBuffer[2] == 0x01) //电机1
+        {
+            *PARAMETER[50].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+        }
+        else if(UsartRxBuffer[2] == 0x02)  //电机2
+        {
+            *PARAMETER[53].lpParam = Usart_ReadRegValue(UsartRxBuffer,7); //修改motor2数据位202021205
+        }
+        else if(UsartRxBuffer[2] == 0x03)  //电机1-2
+        {
+            *PARAMETER[50].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+            *PARAMETER[53].lpParam = Usart_ReadRegValue(UsartRxBuffer,7); //增加motor2数据位202021205
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x18:			  //设置电机速度参数
+        if(UsartRxBuffer[2] == 0x01) //电机1
+        {
+            *PARAMETER[27].lpParam = Usart_ReadRegValue(UsartRxBuffer,3)/0.6;
+            *PARAMETER[29].lpParam = Usart_ReadRegValue(UsartRxBuffer,7);
+        }
+        else if(UsartRxBuffer[2] == 0x02)  //电机2
+        {
+            *PARAMETER[30].lpParam = Usart_ReadRegValue(UsartRxBuffer,11)/0.6;
+            *PARAMETER[32].lpParam = Usart_ReadRegValue(UsartRxBuffer,15);
+        }
+        else if(UsartRxBuffer[2] == 0x03)  //电机1-2
+        {
+            *PARAMETER[27].lpParam = Usart_ReadRegValue(UsartRxBuffer,3)/0.6;
+            *PARAMETER[30].lpParam = Usart_ReadRegValue(UsartRxBuffer,11)/0.6;
+            *PARAMETER[29].lpParam = Usart_ReadRegValue(UsartRxBuffer,7);
+            *PARAMETER[32].lpParam = Usart_ReadRegValue(UsartRxBuffer,15);
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x19:      //设置电机位置参数
+        if(UsartRxBuffer[2] == 0x01) //电机1
+        {
+            *PARAMETER[21].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);  //目标位置
+            *PARAMETER[6].lpParam = Usart_ReadRegValue(UsartRxBuffer,7)/0.6;   //目标速度
+            *PARAMETER[4].lpParam = Usart_ReadRegValue(UsartRxBuffer,11)/0.6;  //加速度
+            *PARAMETER[5].lpParam = Usart_ReadRegValue(UsartRxBuffer,15)/0.6;  //减速度
+            SetPositionMotor1 = SetPulseMotor1*RAD_PULSE/M1_ENCODER_PPR/16;  //增加 1000*pi/M1_ENCODER_PPR/2
+        }
+        else if(UsartRxBuffer[2] == 0x02)  //电机2
+        {
+            *PARAMETER[24].lpParam = Usart_ReadRegValue(UsartRxBuffer,19);   //目标位置
+            *PARAMETER[16].lpParam = Usart_ReadRegValue(UsartRxBuffer,23)/0.6;   //目标速度
+            *PARAMETER[14].lpParam = Usart_ReadRegValue(UsartRxBuffer,27)/0.6;  //加速度
+            *PARAMETER[15].lpParam = Usart_ReadRegValue(UsartRxBuffer,31)/0.6;  //减速度
+            SetPositionMotor2 = SetPulseMotor2*RAD_PULSE/M2_ENCODER_PPR/16;  //增加
+        }
+        else if(UsartRxBuffer[2] == 0x03)  //电机1-2
+        {
+            *PARAMETER[21].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+            *PARAMETER[24].lpParam = Usart_ReadRegValue(UsartRxBuffer,19);
+            *PARAMETER[6].lpParam = Usart_ReadRegValue(UsartRxBuffer,7)/0.6;
+            *PARAMETER[4].lpParam = Usart_ReadRegValue(UsartRxBuffer,11)/0.6;
+            *PARAMETER[5].lpParam = Usart_ReadRegValue(UsartRxBuffer,15)/0.6;
+            *PARAMETER[16].lpParam = Usart_ReadRegValue(UsartRxBuffer,23)/0.6;
+            *PARAMETER[14].lpParam = Usart_ReadRegValue(UsartRxBuffer,27)/0.6;
+            *PARAMETER[15].lpParam = Usart_ReadRegValue(UsartRxBuffer,31)/0.6;
+            SetPositionMotor1 = SetPulseMotor1*RAD_PULSE/M1_ENCODER_PPR/16;  //增加
+            SetPositionMotor2 = SetPulseMotor2*RAD_PULSE/M2_ENCODER_PPR/16;  //增加
+        }
+        RefreshCmd_Type = 0;
+        UsartState = 0xFE;
+        break;
+    case 0x1A:      //设置电机换向参数（换向电流，仅设置霍尔传感器！）
+        if(UsartRxBuffer[2] == 0x01) //电机1
+        {
+            *PARAMETER[56].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+        }
+        else if(UsartRxBuffer[2] == 0x02)  //电机2
+        {
+            *PARAMETER[57].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+        }
+        else if(UsartRxBuffer[2] == 0x03)  //电机1-2
+        {
+            *PARAMETER[56].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+            *PARAMETER[57].lpParam = Usart_ReadRegValue(UsartRxBuffer,3);
+        }
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x1B:      //下发示波器参数
+        switch(UsartRxBuffer[2])
+        {
+        case 0:
+            TempID1 = 70;
+            break;
+        case 1:
+            TempID1 = 74;
+            break;
+        case 2:
+            TempID1 = 27;
+            break;
+        case 3:
+            TempID1 = 28;
+            break;
+        case 4:
+            TempID1 = 21;
+            break;
+        case 5:
+            TempID1 = 22;
+            break;
+        case 6:
+            TempID1 = 71;
+            break;
+        case 7:
+            TempID1 = 75;
+            break;
+        case 8:
+            TempID1 = 30;
+            break;
+        case 9:
+            TempID1 = 31;
+            break;
+        case 10:
+            TempID1 = 24;
+            break;
+        case 11:
+            TempID1 = 25;
+            break;
+        default:
+            break;
+        }
+        switch(UsartRxBuffer[3])
+        {
+        case 0:
+            TempID2 = 70;
+            break;
+        case 1:
+            TempID2 = 74;
+            break;
+        case 2:
+            TempID2 = 27;
+            break;
+        case 3:
+            TempID2 = 28;
+            break;
+        case 4:
+            TempID2 = 21;
+            break;
+        case 5:
+            TempID2 = 22;
+            break;
+        case 6:
+            TempID2 = 71;
+            break;
+        case 7:
+            TempID2 = 75;
+            break;
+        case 8:
+            TempID2 = 30;
+            break;
+        case 9:
+            TempID2 = 31;
+            break;
+        case 10:
+            TempID2 = 24;
+            break;
+        case 11:
+            TempID2 = 25;
+            break;
+        default:
+            break;
+        }
+        switch(UsartRxBuffer[4])
+        {
+        case 0:
+            TempID3 = 70;
+            break;
+        case 1:
+            TempID3 = 74;
+            break;
+        case 2:
+            TempID3 = 27;
+            break;
+        case 3:
+            TempID3 = 28;
+            break;
+        case 4:
+            TempID3 = 21;
+            break;
+        case 5:
+            TempID3 = 22;
+            break;
+        case 6:
+            TempID3 = 71;
+            break;
+        case 7:
+            TempID3 = 75;
+            break;
+        case 8:
+            TempID3 = 30;
+            break;
+        case 9:
+            TempID3 = 31;
+            break;
+        case 10:
+            TempID3 = 24;
+            break;
+        case 11:
+            TempID3 = 25;
+            break;
+        default:
+            break;
+        }
+        switch(UsartRxBuffer[5])
+        {
+        case 0:
+            TempID4 = 70;
+            break;
+        case 1:
+            TempID4 = 74;
+            break;
+        case 2:
+            TempID4 = 27;
+            break;
+        case 3:
+            TempID4 = 28;
+            break;
+        case 4:
+            TempID4 = 21;
+            break;
+        case 5:
+            TempID4 = 22;
+            break;
+        case 6:
+            TempID4 = 71;
+            break;
+        case 7:
+            TempID4 = 75;
+            break;
+        case 8:
+            TempID4 = 30;
+            break;
+        case 9:
+            TempID4 = 31;
+            break;
+        case 10:
+            TempID4 = 24;
+            break;
+        case 11:
+            TempID4 = 25;
+            break;
+        default:
+            break;
+        }
+        UsartState = 0xFE;
+        RefreshCmd_Type = 2;
+        break;
+    case 0x1C:      //下发示波器ID参数
+        TempID1 = UsartRxBuffer[2];
+        TempID2 = UsartRxBuffer[3];
+        TempID3 = UsartRxBuffer[4];
+        TempID4 = UsartRxBuffer[5];
+        UsartState = 0xFE;
+        RefreshCmd_Type = 2;
+        break;
+    case 0x1D:      //flash参数保存
+        MC_StartStopFlag = 9;
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x1E:      //上传参数表变量
+        DualDrv_Parameter_Upload();
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    case 0x1F:      //下发参数表变量
+        DualDrv_Parameter_Download();
+        UsartState = 0xFE;
+        RefreshCmd_Type = 0;
+        break;
+    }
+
+
+    if(RefreshCmd_Type == 2 || RefreshCmd_Type == 0)	 //示波器界面
+    {
+        if(Labview_uart_Flag >= Labview_uart_Flag_CNT) //50ms
+        {
+            Labview_uart_Flag = 0;
+            UsartTxBuffer[0] = 0xAA;
+            UsartTxBuffer[1] = 0x80;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (*PARAMETER[TempID1].lpParam>>(i*8))&0xFF;//电机1实际速度
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[TempID2].lpParam>>(i*8))&0xFF;//电机1实际电流
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+10] = (*PARAMETER[TempID3].lpParam>>(i*8))&0xFF;//电机1实际位置!
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+14] = (*PARAMETER[TempID4].lpParam>>(i*8))&0xFF;//电机2实际速度
+            }
+            UsartTxBuffer[18] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],19,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+//				for(jj=0;jj<50000;jj++)       //延时
+//				{}
+        }
+    }
+    else if(RefreshCmd_Type == 1) //监控界面
+    {
+        if(Labview_uart_Flag > Labview_uart_Flag_CNT*2) //50ms
+        {
+            Labview_uart_Flag = 0;
+//			  CurrentPosition11 =  MC_GetCurrentPosition1()*M1_ENCODER_PPR/RAD_PULSE;  //获取实际位置pulse
+//				CurrentPosition22 =  MC_GetCurrentPosition2()*M2_ENCODER_PPR/RAD_PULSE;  //获取实际位置pulse
+            UsartTxBuffer[0] = 0xAA;
+            UsartTxBuffer[1] = 0x90;
+            TempSpeedMotor1 = *PARAMETER[28].lpParam*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+2] = (TempSpeedMotor1>>(i*8))&0xFF;//电机1实际速度
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+6] = (*PARAMETER[74].lpParam>>(i*8))&0xFF;//电机1实际电流
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+10] = (*PARAMETER[22].lpParam>>(i*8))&0xFF;//电机1实际位置!
+            }
+            TempSpeedMotor2 = *PARAMETER[31].lpParam*0.6;
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+14] = (TempSpeedMotor2>>(i*8))&0xFF;//电机2实际速度
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+18] = (*PARAMETER[75].lpParam>>(i*8))&0xFF;//电机2实际电流
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+22] = (*PARAMETER[25].lpParam>>(i*8))&0xFF;//电机2实际位置
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+26] = (*PARAMETER[86].lpParam>>(i*8))&0xFF;//电机1状态
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+30] = (*PARAMETER[87].lpParam>>(i*8))&0xFF;//电机2状态（新增）
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+34] = (*PARAMETER[94].lpParam>>(i*8))&0xFF;//母线电压！
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+38] = (*PARAMETER[92].lpParam>>(i*8))&0xFF;//电机1温度！
+            }
+            for(i=0; i<4; i++)
+            {
+                UsartTxBuffer[i+42] = (*PARAMETER[93].lpParam>>(i*8))&0xFF;//电机2温度！
+            }
+            UsartTxBuffer[46] = 0x2F;
+            HAL_UART_Transmit(&husart_debug, &UsartTxBuffer[0],47,0xffff);
+            memset(UsartTxBuffer,0,sizeof(UsartTxBuffer));  //清除缓存
+        }
+    }
+}
+
+
+/***********数据读取****20200923***************/
+long Usart_ReadRegValue(u8 RxBuffer[],int i)
+{
+    long Date = 0,date1 = 0,date2 = 0,date3 = 0,date4 = 0;
+    date1 = RxBuffer[i];
+    date2 = RxBuffer[i+1]<<8;
+    date3 = RxBuffer[i+2]<<16;
+    date4 = RxBuffer[i+3]<<24;
+    Date = date1+date2+date3+date4;
+    return Date;
+}
+
+/***********数据发送****20200927*********************/
+long Usart_Labview_SendRegValue(long TxDate)
+{
+    int i;
+    long Date = 0;
+    long TxBuffer[4] = {0};
+    for(i=0; i<4; i++)
+    {
+        TxBuffer[3-i] = (TxDate>>(i*8))&0xff;
+    }
+    Date = (TxBuffer[3]<<24)+(TxBuffer[2]<<16)+(TxBuffer[1]<<8)+TxBuffer[0];
+    return Date;
+}
+
+void DualDrv_Parameter_Upload(void)
+{
+    static u16 i = 0;
+    printf("*/");
+    for(i=0; i<ParaNum; i++)
+    {
+        if(PARAMETER[i].stAttributes.bSaveToFlash == 1)
+        {
+            printf("ID=%d/IX=%ld/",PARAMETER[i].sParID,*PARAMETER[i].lpParam );
+        }
+    }
+    printf("#");//发送结束符
+}
+
+
+void DualDrv_Parameter_Download(void)
+{
+    static u16 i = 0,q = 0,para_id = 0,lenth = 0,j=0;
+
+    for(i=0; i<UsartReceiveDate-1; i++)
+    {
+        if((UsartRxBuffer[i] == 'I')&&(UsartRxBuffer[i+1] == 'D')&&(UsartRxBuffer[i+2] == '='))
+        {
+            j = i;
+            while((UsartRxBuffer[j+3] != '/')&&(j<i+Rec_Len)) j++;
+            for(lenth = i; lenth < j; lenth++)
+            {
+                str_table[0][lenth-i] = UsartRxBuffer[lenth+3];
+            }
+            para_id = atoi(*(str_table+0));
+            memset(*(str_table+0),'\0',sizeof(*(str_table+0)));
+            j = j+4;
+            q = j;
+            while((UsartRxBuffer[q+3] != '/')&&(q<j+Rec_Len)) q++;
+            for(lenth = j; lenth < q; lenth++)
+            {
+                str_table[0][lenth-j] = UsartRxBuffer[lenth+3];
+            }
+            *(PARAMETER[para_id].lpParam) = atoi(*(str_table+0));
+            memset(*(str_table+0),'\0',sizeof(*(str_table+0)));
+            j = q+4;
+        }
+    }
+}
