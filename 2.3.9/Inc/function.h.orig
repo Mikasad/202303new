@@ -1,0 +1,254 @@
+/************************************************************
+*	CopyRight (c) 2012-2012 ZL
+*	All rights reserved.
+*	FileName:		DAYE.c
+*	Dependencies:
+*	Revision:		1.0
+*	Author:			solo
+*	Date:			2015-01-01
+*	Modified:
+************************************************************/
+
+#ifndef	_FUNCTION_H
+#define	_FUNCTION_H
+
+/*
+***********************************************
+* Include headfile
+***********************************************
+*/
+
+#include "include.h"
+#include "stm32f4xx_hal.h"
+
+typedef int32_t  s32;
+typedef int16_t s16;
+typedef int8_t  s8;
+
+typedef uint32_t  u32;
+typedef uint16_t u16;
+typedef uint8_t  u8;
+/*
+***********************************************
+* Private define
+***********************************************
+*/
+
+#define U8_MAX     (255)
+#define S8_MAX     (127)
+#define S8_MIN     (-128)
+#define U16_MAX    (65535u)
+#define S16_MAX    (32767)
+#define S16_MIN    (-32768)
+#define U32_MAX    (4294967295uL)
+#define S32_MAX    (2147483647)
+#define S32_MIN    (-2147483648uL)
+
+
+#define A1mSec		0x01
+#define A2mSec		0x02
+#define A10mSec		0x04
+#define A20mSec		0x08
+#define A250mSec	0x10
+#define A500mSec	0x20
+#define A1Sec		0x40
+
+
+
+#define PWMMAX	499
+#define PWMMin        0
+
+#define ABS(i)  ((i)>=0?(i):~(i))
+
+
+//#define CurrentValue(A)   (A*14.74)//Current value=(14.74*A)A  3.6mR
+#define CurrentValue(A)   (A*15.48)//Current value=(15.48*A)A  3.6mR
+
+#define BusVoltValue(B)   (B*62.6)// BusVoltValue/ V
+#define MOTOR0_CurrentValue(A)   (A*194)  //A  电流检测范围为 21.15A 4mo
+#define MOTOR1_CurrentValue(A)   (A*194) 	//A  电流检测范围为 21.15A 4mo
+#define MOTOR2_CurrentValue(A)   (A*194) 	//A  电流检测范围为 21.15A 4mo
+#define MOTOR3_CurrentValue(A)   (A*145)  //A  电流检测范围为28.2A 3mo
+#define MOTOR4_CurrentValue(A)   (A*145) 	//A  电流检测范围为28.2A 3mo
+#define MOTOR5_CurrentValue(A)   (A*116)	  //A  电流检测范围为35.25A 2mo
+#define MOTOR6_CurrentValue(A)   (A*116)	  //A  电流检测范围为35.25A 2mo
+//#define MOTOR7_CurrentValue(A)   (A*15.48)
+//#define MOTOR8_CurrentValue(A)   (A*15.48)
+#define MOTOR9_CurrentValue(A)    (A*194)	 //A  电流检测范围为 21.15A 4mo
+
+//#define MOTOR10_CurrentValue(A)   (A*194)  //A  电流检测范围为 21.15A 4mo
+//#define MOTOR11_CurrentValue(A)   (A*194)  //A  电流检测范围为 21.15A 4mo
+//#define MOTOR12_CurrentValue(A)   (A*194)  //A  电流检测范围为 21.15A 4mo
+//#define MOTOR13_CurrentValue(A)   (A*194)  //A  电流检测范围为 21.15A 4mo
+
+#define MOTOR_5_6_ENABLE  HAL_GPIO_WritePin(GPIOE, BLDC_ENABLE_Pin, GPIO_PIN_SET);
+
+#define MOTOR_0_1_ENABLE  HAL_GPIO_WritePin(GPIOA, RESET_1_Pin, GPIO_PIN_SET);
+
+#define MOTOR_2_3_4_ENABLE  HAL_GPIO_WritePin(RESET_2_GPIO_Port, RESET_2_Pin, GPIO_PIN_SET);
+
+
+#if 1
+#define BIT0 0x01
+#define BIT1 0x02
+#define BIT2 0x04
+#define BIT3 0x08
+#define BIT4 0x10
+#define BIT5 0x20
+#define BIT6 0x40
+#define BIT7 0x80
+#define NEED_TO_CURRPROJECT_MOTORNUM  8   //需要过流保护电机个数
+#define OVER_CURRENT(NUM) 	1<<NUM
+
+
+#define  NO_ERROR                        0X00000000
+
+#define  PUSH_MOTOR1_OVER_CUR            0X00000001
+#define  PUSH_MOTOR2_OVER_CUR            0X00000002
+#define  PUSH_MOTOR3_OVER_CUR            0X00000004
+#define  ONEWYA_MOTOR1_OVER_CUR          0X00000008
+
+#define  ONEWYA_MOTOR2_OVER_CUR          0X00000010
+#define  BLDC1_OVER_CUR           			 0X00000020
+#define  BLDC2_OVER_CUR            			 0X00000040
+#define  OVER_VOLTAGE                    0X00000080
+
+#define  UNDER_VOLTAGE                   0X00000100
+#define  PUSH_MOTOR4_OVER_CUR          	 0X00000200
+#define  HALL5_SENSOR_ERR         			 0X00000400
+#define  MOTOR5_OVER_HEAT                0X00000800//暂时未使用   
+
+#define  MOTOR5_NTC_BREAK_LINE    			 0X00001000//暂时未使用
+#define  MOTOR5_NTC_SHORT_LINE    			 0X00002000//暂时未使用
+#define  MOTOR5_LOCKEDUP         		 		 0X00004000//暂时未使用
+#define  HALL6_SENSOR_ERR        			   0X00008000
+
+#define  MOTOR6_OVER_HEAT                0X00010000//暂时未使用
+#define  MOTOR6_NTC_BREAK_LINE           0X00020000//暂时未使用
+#define  MOTOR6_NTC_SHORT_LINE           0X00040000//暂时未使用
+#define  MOTOR6_LOCKEDU                  0X00080000//暂时未使用
+
+#define  CAN_COMMUNICATION_ERR           0X00100000
+#define  PUSH_MOTOR1_STUCK    					 0X00200000
+#define  PUSH_MOTOR2_STUCK    					 0X00400000
+#define  PUSH_MOTOR3_STUCK    					 0X00800000
+
+#define  PUSH_MOTOR4_STUCK    					 0X01000000
+#define  BLDC1_STUCK    								 0X02000000
+#define  BRAKE_3_4    					       0X04000000
+#define  BRAKE_0_1_2_9    				 0X08000000
+
+#define  BRAKE10_11_12_13    				 0X10000000
+
+#define  MOTOR5_BREAK										 0X20000000
+#define  MOTOR6_BREAK										 0X40000000
+#define  MOTOR6_BREAK										 0X80000000
+//AD转换V的系数=0.015797
+//#define Volt180V (1127)
+//#define Volt200V (1252)
+//#define Volt240V (1519)
+//#define Volt330V (2066)
+//#define Volt360V (2254)
+
+#define VOLT_160V (1001)
+#define VOLT_200V (1252)  //欠压恢复点
+//#define VOLT_240V (1519)
+//#define VOLT_330V (2066)
+#define VOLT_300V (1878)  //过压恢复点
+#define VOLT_360V (2254)
+
+
+
+/*故障灯*/
+#define GREEN_LED_ON     		HAL_GPIO_WritePin(GPIOB,GPIO_PIN_12,GPIO_PIN_RESET)
+#define GREEN_LED_OFF 			HAL_GPIO_WritePin(GPIOB,GPIO_PIN_12,GPIO_PIN_SET)
+#define	RED_LED1_ON         HAL_GPIO_WritePin(GPIOA,GPIO_PIN_11,GPIO_PIN_RESET)
+#define	RED_LED1_OFF				HAL_GPIO_WritePin(GPIOA,GPIO_PIN_11,GPIO_PIN_SET)
+#define	RED_LED2_ON 				HAL_GPIO_WritePin(GPIOB,GPIO_PIN_6,GPIO_PIN_RESET)
+#define	RED_LED2_OFF				HAL_GPIO_WritePin(GPIOB,GPIO_PIN_6,GPIO_PIN_SET)
+#endif
+
+//***************************************************************
+/*
+***********************************************
+* global variable
+***********************************************
+*/
+typedef enum {FALSE = 0, TRUE = !FALSE} bool;
+typedef struct
+{
+    u8 SysTimFlag;	//system flag
+    u8 MicroSec; /* 微秒计数 */
+    u8 MilliSec; /* 毫秒计数 */
+    u8 SecondCntr;	/*	1秒计数 */
+    u8 test;
+} SysCLC_TypeDef;
+extern SysCLC_TypeDef SysCLC;//system clock variable
+
+
+
+/*
+***********************************************
+*PWMVar Struct
+***********************************************
+*/
+typedef struct
+{
+    u16 test;
+    u16 StartDutyCycle;
+    u16 CutOFFDutyCycle;
+    u16 UpDateDutyCycle;
+    u16 IntCnt;
+    u16 DutyCycleMax;
+    u16 DutyCycleMin;
+} PWMVAR_TypeDef;
+extern PWMVAR_TypeDef PWMVAR;//TIM1 variable
+
+
+/*
+***********************************************
+*VoltVar Struct
+***********************************************
+*/
+
+typedef struct
+{
+    u16 AdBuf;
+    u16 SVADBuf;
+    u16 SVADAverage;
+    u16 BUS;
+    u16 BusLow;
+    int16_t BusLowCnt;
+	  u16 HighGuardTime;
+    u16 BusHigh;
+    int16_t BusHighCnt;
+		u16 LowGuardTime;
+    u8 SvModelCnt;
+    u16 servo;
+    u16 ADTTT;
+} VoltVar_TypeDef;
+extern VoltVar_TypeDef VoltVar;
+
+
+extern  u32 wGlobal_Flags;
+extern  u32 FaultOccurred;
+extern u8 Push_motor_calibrationFLAG;
+extern u8 Push_Location_model;
+/*
+***********************************************
+* User Functions
+***********************************************
+*/
+
+void SysTime(void);
+void CurrentLimit(u8 Motor_NUM);
+void MotorStuckCheck(void);
+void Over_VoltageCheck(void);
+void MotorClearFault(void);
+void MC_SetFault(u32 hFault_type);
+void MC_ClearFault(u32 hFault_type);
+void Init_Drive_Para(void);
+void DisplayErrLed(void);
+void Push_Motor_Location_Control(void);
+void Push_Motor_Calibrate(void);
+#endif

@@ -1,0 +1,1140 @@
+/************************************************************
+
+************************************************************/
+
+/*
+***********************************************
+* Include headfile
+***********************************************
+*/
+#include "function.h"
+#include "stm32f4xx_hal.h"
+#include "bsp_BDCMotor.h"
+#include "main.h"
+#include "canopen_pdo.h"
+/*
+***********************************************
+* Private Const Table
+***********************************************
+*/
+VoltVar_TypeDef VoltVar;
+u32 wGlobal_Flags;
+u32 FaultOccurred = 0;
+uint32_t DisplayCounter = 0;
+
+/*------------------------------------------------
+Function:电流保护限制
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+void CurrentLimit(u8 Motor_NUM)
+{
+    if(MotorControl[Motor_NUM].Current.FilterValue > MotorControl[Motor_NUM].Current.MaxValue1)
+    {
+        MotorControl[Motor_NUM].Current.OFCnt1++;
+        if(MotorControl[Motor_NUM].Current.OFCnt1 > MotorControl[Motor_NUM].Current.OFCnt1_T)
+        {
+            if(MotorControl[Motor_NUM].PWM_Duty>0)
+            {
+                MotorControl[Motor_NUM].PWM_Duty -= 1;
+            }
+            else if(MotorControl[Motor_NUM].PWM_Duty<0)
+            {
+                MotorControl[Motor_NUM].PWM_Duty += 1;
+            }
+        }
+        if(MotorControl[Motor_NUM].Current.FilterValue > MotorControl[Motor_NUM].Current.MaxValue2)
+        {
+            MotorControl[Motor_NUM].Current.OFCnt2++;
+            if(MotorControl[Motor_NUM].Current.OFCnt2 > MotorControl[Motor_NUM].Current.OFCnt2_T)
+            {
+                SetMotorStop(Motor_NUM);
+                MC_SetFault(OVER_CURRENT(Motor_NUM));
+                MotorControl[Motor_NUM].Fault_Flag = 1;
+                MotorControl[Motor_NUM].Current.OFCnt2 = 0;
+            }
+            if(MotorControl[Motor_NUM].Current.FilterValue > MotorControl[Motor_NUM].Current.MaxValue3)
+            {
+                MotorControl[Motor_NUM].Current.OFCnt3++;
+                if(MotorControl[Motor_NUM].Current.OFCnt3 > MotorControl[Motor_NUM].Current.OFCnt3_T)
+                {
+                    SetMotorStop(Motor_NUM);
+                    MC_SetFault(OVER_CURRENT(Motor_NUM));
+                    MotorControl[Motor_NUM].Fault_Flag = 1;
+                    MotorControl[Motor_NUM].Current.OFCnt3 = 0;
+                }
+                if(MotorControl[Motor_NUM].Current.FilterValue > MotorControl[Motor_NUM].Current.MaxValue4)
+                {
+                    MotorControl[Motor_NUM].Current.OFCnt4++;
+                    if(MotorControl[Motor_NUM].Current.OFCnt4 > MotorControl[Motor_NUM].Current.OFCnt4_T)
+                    {
+                        SetMotorStop(Motor_NUM);
+                        MC_SetFault(OVER_CURRENT(Motor_NUM));
+                        MotorControl[Motor_NUM].Fault_Flag = 1;
+                        MotorControl[Motor_NUM].Current.OFCnt4 = 0;
+                    }
+                }
+                else if(MotorControl[Motor_NUM].Current.OFCnt4 > 0)
+                {
+                    MotorControl[Motor_NUM].Current.OFCnt4--;
+                }
+            }
+            else if(MotorControl[Motor_NUM].Current.OFCnt3 > 0)
+            {
+                MotorControl[Motor_NUM].Current.OFCnt3--;
+            }
+        }
+        else if(MotorControl[Motor_NUM].Current.OFCnt2 > 0)
+        {
+            MotorControl[Motor_NUM].Current.OFCnt2--;
+        }
+    }
+    else if(MotorControl[Motor_NUM].Current.OFCnt1 > 0)
+    {
+        MotorControl[Motor_NUM].Current.OFCnt1--;
+        if(MotorControl[Motor_NUM].Current.OFCnt2 > 0)
+        {
+            MotorControl[Motor_NUM].Current.OFCnt2--;
+        }
+        if(MotorControl[Motor_NUM].Current.OFCnt3 > 0)
+        {
+            MotorControl[Motor_NUM].Current.OFCnt3--;
+        }
+        if(MotorControl[Motor_NUM].Current.OFCnt4 > 0)
+        {
+            MotorControl[Motor_NUM].Current.OFCnt4--;
+        }
+    }
+
+}
+
+/*------------------------------------------------
+Function:设置错误标志
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+void MC_SetFault(u32 hFault_type)
+{
+    wGlobal_Flags |= hFault_type;
+    sendPDOevent(&CANopen_Drive);
+    if(FaultOccurred !=0)
+    {
+        FaultOccurred |=hFault_type;
+        FaultOccurred &=hFault_type;
+    }
+    else
+        FaultOccurred  |= hFault_type; //只报警当前错误类型
+}
+/*------------------------------------------------
+Function:清除错误标志
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+void MC_ClearFault(u32 hFault_type)
+{
+    wGlobal_Flags &= ~hFault_type;
+    sendPDOevent(&CANopen_Drive);
+    FaultOccurred &= ~hFault_type; //清除当前错误类型
+
+}
+
+/*----------------------------
+*Fuction：绝对值函数
+*Explain：类型：float
+----------------------------*/
+float f_abs(float a)
+{
+    float temp;
+    if(a>0) temp = a;
+    else if(a<0) temp = -a;
+
+    return temp;
+}
+long l_abs(long a)
+{
+    long temp;
+    if(a>0) temp = a;
+    else if(a<0) temp = -a;
+
+    return temp;
+}
+
+//堵转结构体
+typedef struct OLCKED_ROTOR_Ttag
+{
+    long pStuckCurr;
+    long pStuckTime;
+    long pStuckVel;
+} OLCKED_ROTOR_T;
+
+u8 Need_To_Stuck_Function[MOTOR_NUM] = {0,0,0,0,0,1,1,0,0,0,0,0,0,0};  //哪个电机需要堵转保护就置1
+//uint16_t Stuck_Current = 0;
+int32_t  Stuck_Speed = 50;
+uint32_t Stuck_Time = 100000;
+uint16_t Stuck_TimeCnt[MOTOR_NUM] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+//uint16_t Unit_Of_Current[MOTOR_NUM] = {637,637,637,316,316,253,253,0,0,637,0,0,0,0};
+float Percentage_Of_Current[MOTOR_NUM] = {0.5,0.5,0.5,0.5,0.5,0.8,0.8,0.5,0.5,0.5,0.5,0.5,0.5,0.5};
+void MotorStuckCheck(void)
+{
+    for(u8 i=0; i<MOTOR_NUM; i++)
+    {
+        CurrentLimit(i);
+        if(Need_To_Stuck_Function[i]) //如果该电机需要堵转保护
+        {
+            if(MotorControl[i].Current.FilterValue > (float)(MotorControl[i].Current.MaxValue1*Percentage_Of_Current[i])  && l_abs(MotorControl[i].Speed_Real) < Stuck_Speed)
+            {
+                Stuck_TimeCnt[i]++;
+                if(Stuck_TimeCnt[i] > Stuck_Time)
+                {
+                    SetMotorStop(i);
+//                    MC_SetFault(OVER_CURRENT(i));
+                    MotorControl[i].Fault_Flag = 1;
+                    Stuck_TimeCnt[i] = 0;
+                }
+            }
+            else
+            {
+                if(Stuck_TimeCnt[i]>0)
+                {
+                    Stuck_TimeCnt[i]--;
+                }
+            }
+        }
+    }
+
+}
+void Over_VoltageCheck(void)  //10ms
+{
+    if(VoltVar.BUS>VoltVar.BusHigh)
+    {
+        VoltVar.BusHighCnt++;
+        if(VoltVar.BusHighCnt>VoltVar.HighGuardTime)
+        {
+            VoltVar.BusHighCnt   = VoltVar.HighGuardTime+50;
+            for(u8 i=0; i < MOTOR_NUM; i++)
+            {
+                MotorControl[i].Motor_Start_Stop = DISABLE;
+            }
+            MC_SetFault(OVER_VOLTAGE);
+        }
+    }
+    else if(VoltVar.BUS < VOLT_300V )   //OVR
+    {
+        if(VoltVar.BusHighCnt>0)
+        {
+            VoltVar.BusHighCnt--;
+            if(VoltVar.BusHighCnt < VoltVar.HighGuardTime)
+            {
+                MC_ClearFault(OVER_VOLTAGE);
+            }
+        }
+    }
+
+    if(VoltVar.BUS<VoltVar.BusLow)
+    {
+        if(++VoltVar.BusLowCnt>VoltVar.LowGuardTime)
+        {
+            VoltVar.BusLowCnt = VoltVar.LowGuardTime+50;
+            for(u8 i=0; i < MOTOR_NUM; i++)
+            {
+                MotorControl[i].Motor_Start_Stop = DISABLE;
+            }
+            MC_SetFault(UNDER_VOLTAGE);
+        }
+    }
+    else if(VoltVar.BUS > VOLT_200V)
+    {
+        if(VoltVar.BusLowCnt>0) //UVR
+        {
+            VoltVar.BusLowCnt--;
+            if(VoltVar.BusLowCnt < VoltVar.LowGuardTime)
+            {
+                MC_ClearFault(UNDER_VOLTAGE);
+            }
+        }
+    }
+
+}
+/*------------------------------------------------
+Function:参数初始化
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+void Init_Drive_Para(void)
+{
+    PID_Init (&PID_Speed_InitStruct[5],&PID_Speed_InitStruct[6]);
+
+    VoltVar.HighGuardTime  = 40;
+    VoltVar.LowGuardTime  = 50;
+    VoltVar.BusHigh = VOLT_360V ;
+    VoltVar.BusLow =  VOLT_160V ;
+	   TIM3->CCR1 = 0;
+	   TIM8->CCR4 = 8400;
+	    MotorControl[10].Motor_Start_Stop = 1;
+   MotorControl[12].Motor_Start_Stop = 1;
+//    MotorControl[3].PWM_DutySet = 4000;
+//    MotorControl[4].PWM_DutySet = 4000;
+//    MotorControl[5].Speed_Set = 1000;
+//    MotorControl[6].Speed_Set = 1000;
+//    MotorControl[7].PWM_DutySet = 5000;
+//    MotorControl[8].PWM_DutySet = 1000;
+
+//    MotorControl[10].PWM_DutySet = 8400;
+//    MotorControl[12].PWM_DutySet = 8400;
+//    MotorControl[10].Motor_Start_Stop = 1;
+//    MotorControl[12].Motor_Start_Stop = 1;
+//    MotorControl[12].PWM_DutySet = 4000;
+//    MotorControl[13].PWM_DutySet = 4000;
+
+//	MotorControl[0].Location_Set = 999;
+
+    MotorControl[0].Current.MaxValue1 = MOTOR0_CurrentValue(3) ;
+    MotorControl[0].Current.MaxValue2 = MOTOR0_CurrentValue(4) ;
+    MotorControl[0].Current.MaxValue3 = MOTOR0_CurrentValue(5) ;
+    MotorControl[0].Current.MaxValue4 = MOTOR0_CurrentValue(6) ;
+    MotorControl[0].Current.OFCnt1_T = 200;
+    MotorControl[0].Current.OFCnt2_T = 20;
+    MotorControl[0].Current.OFCnt3_T = 8;
+    MotorControl[0].Current.OFCnt4_T = 5;
+
+    MotorControl[1].Current.MaxValue1 = MOTOR1_CurrentValue(3) ;
+    MotorControl[1].Current.MaxValue2 = MOTOR1_CurrentValue(4) ;
+    MotorControl[1].Current.MaxValue3 = MOTOR1_CurrentValue(5) ;
+    MotorControl[1].Current.MaxValue4 = MOTOR1_CurrentValue(6) ;
+    MotorControl[1].Current.OFCnt1_T = 200;
+    MotorControl[1].Current.OFCnt2_T = 20;
+    MotorControl[1].Current.OFCnt3_T = 8;
+    MotorControl[1].Current.OFCnt4_T = 5;
+
+    MotorControl[2].Current.MaxValue1 = MOTOR2_CurrentValue(3) ;
+    MotorControl[2].Current.MaxValue2 = MOTOR2_CurrentValue(4) ;
+    MotorControl[2].Current.MaxValue3 = MOTOR2_CurrentValue(5) ;
+    MotorControl[2].Current.MaxValue4 = MOTOR2_CurrentValue(6) ;
+    MotorControl[2].Current.OFCnt1_T = 200;
+    MotorControl[2].Current.OFCnt2_T = 20;
+    MotorControl[2].Current.OFCnt3_T = 8;
+    MotorControl[2].Current.OFCnt4_T = 5;
+
+    MotorControl[9].Current.MaxValue1 = MOTOR9_CurrentValue(3) ;
+    MotorControl[9].Current.MaxValue2 = MOTOR9_CurrentValue(4) ;
+    MotorControl[9].Current.MaxValue3 = MOTOR9_CurrentValue(5) ;
+    MotorControl[9].Current.MaxValue4 = MOTOR9_CurrentValue(6) ;
+    MotorControl[9].Current.OFCnt1_T = 200;
+    MotorControl[9].Current.OFCnt2_T = 20;
+    MotorControl[9].Current.OFCnt3_T = 8;
+    MotorControl[9].Current.OFCnt4_T = 5;
+
+    MotorControl[3].Current.MaxValue1 = MOTOR3_CurrentValue(7) ;  //过滤电机
+    MotorControl[3].Current.MaxValue2 = MOTOR3_CurrentValue(8) ;
+    MotorControl[3].Current.MaxValue3 = MOTOR3_CurrentValue(9) ;  //过滤电机
+    MotorControl[3].Current.MaxValue4 = MOTOR3_CurrentValue(10) ;
+    MotorControl[3].Current.OFCnt1_T = 200;
+    MotorControl[3].Current.OFCnt2_T = 20;
+    MotorControl[3].Current.OFCnt3_T = 8;
+    MotorControl[3].Current.OFCnt4_T = 5;
+
+    MotorControl[4].Current.MaxValue1 = MOTOR4_CurrentValue(7) ;  //喷水电机
+    MotorControl[4].Current.MaxValue2 = MOTOR4_CurrentValue(8) ;
+    MotorControl[4].Current.MaxValue3 = MOTOR4_CurrentValue(9) ;  //喷水电机
+    MotorControl[4].Current.MaxValue4 = MOTOR4_CurrentValue(10) ;
+    MotorControl[4].Current.OFCnt1_T = 200;
+    MotorControl[4].Current.OFCnt2_T = 20;
+    MotorControl[4].Current.OFCnt3_T = 8;
+    MotorControl[4].Current.OFCnt4_T = 5;
+
+    MotorControl[5].Current.MaxValue1 = MOTOR5_CurrentValue(4) ;
+    MotorControl[5].Current.MaxValue2 = MOTOR5_CurrentValue(9) ;
+    MotorControl[5].Current.MaxValue3 = MOTOR5_CurrentValue(9) ;
+    MotorControl[5].Current.MaxValue4 = MOTOR5_CurrentValue(9) ;
+    MotorControl[5].Current.OFCnt1_T = 5000;
+    MotorControl[5].Current.OFCnt2_T = 200;
+    MotorControl[5].Current.OFCnt3_T = 40;
+    MotorControl[5].Current.OFCnt4_T = 20;
+    MotorControl[5].Pole_Paires = 2;
+    MotorControl[5].Acceleration = 5;
+    MotorControl[5].Deceleration = 5;
+
+    MotorControl[6].Current.MaxValue1 = MOTOR6_CurrentValue(4) ;
+    MotorControl[6].Current.MaxValue2 = MOTOR6_CurrentValue(9) ;
+    MotorControl[6].Current.MaxValue3 = MOTOR6_CurrentValue(9) ;
+    MotorControl[6].Current.MaxValue4 = MOTOR6_CurrentValue(9) ;
+    MotorControl[6].Current.OFCnt1_T = 5000;
+    MotorControl[6].Current.OFCnt2_T = 200;
+    MotorControl[6].Current.OFCnt3_T = 40;
+    MotorControl[6].Current.OFCnt4_T = 20;
+    MotorControl[6].Pole_Paires = 2;
+    MotorControl[6].Acceleration = 5;
+    MotorControl[6].Deceleration = 5;
+
+    MotorControl[0].Acceleration = 10;
+    MotorControl[0].Deceleration = 10;
+    MotorControl[0].LastMotorDirection = 2;
+    MotorControl[0].Hall.HALL_CaptureValue = 10000; //用于上电标定
+    MotorControl[1].Acceleration = 10;
+    MotorControl[1].Deceleration = 10;
+    MotorControl[1].LastMotorDirection = 2;
+    MotorControl[1].Hall.HALL_CaptureValue = 10000; //用于上电标定
+    MotorControl[2].Acceleration = 10;
+    MotorControl[2].Deceleration = 10;
+    MotorControl[2].LastMotorDirection = 2;
+    MotorControl[2].Hall.HALL_CaptureValue = 10000; //用于上电标定
+
+    MotorControl[3].Acceleration = 10;
+    MotorControl[3].Deceleration = 10;
+
+    MotorControl[4].Acceleration = 10;
+    MotorControl[4].Deceleration = 10;
+
+    MotorControl[7].Acceleration = 10;
+    MotorControl[7].Deceleration = 10;
+
+    MotorControl[8].Acceleration = 10;
+    MotorControl[8].Deceleration = 10;
+
+    MotorControl[9].Acceleration = 10;
+    MotorControl[9].Deceleration = 10;
+    MotorControl[9].LastMotorDirection = 2;
+    MotorControl[9].Hall.HALL_CaptureValue = 10000; //用于上电标定
+
+    MotorControl[10].Current.OFCnt1_T = 5000;
+    MotorControl[10].Current.OFCnt2_T = 200;
+    MotorControl[10].Current.OFCnt3_T = 20;
+    MotorControl[10].Current.OFCnt4_T = 5;
+    MotorControl[10].Acceleration = 10;
+    MotorControl[10].Deceleration = 10;
+
+    MotorControl[11].Current.OFCnt1_T = 5000;
+    MotorControl[11].Current.OFCnt2_T = 200;
+    MotorControl[11].Current.OFCnt3_T = 20;
+    MotorControl[11].Current.OFCnt4_T = 5;
+    MotorControl[11].Acceleration = 10;
+    MotorControl[11].Deceleration = 10;
+
+    MotorControl[12].Current.OFCnt1_T = 5000;
+    MotorControl[12].Current.OFCnt2_T = 200;
+    MotorControl[12].Current.OFCnt3_T = 20;
+    MotorControl[12].Current.OFCnt4_T = 5;
+    MotorControl[12].Acceleration = 10;
+    MotorControl[12].Deceleration = 10;
+
+    MotorControl[13].Current.OFCnt1_T = 5000;
+    MotorControl[13].Current.OFCnt2_T = 200;
+    MotorControl[13].Current.OFCnt3_T = 20;
+    MotorControl[13].Current.OFCnt4_T = 5;
+    MotorControl[13].Acceleration = 10;
+    MotorControl[13].Deceleration = 10;
+
+    MotorControl[5].Hall.HallState = (GPIOD->IDR>>5)&(0x7);
+    MotorControl[5].Hall.ChangeFlag = 1; //电机停止之后需要换向启动
+    MotorControl[6].Hall.HallState = HALL_GetPhase2();
+    MotorControl[6].Hall.ChangeFlag = 1;
+
+
+    HALL_Study[1].StudySectorCnt3 = 200;/*换向一次时间1代表2ms*/
+    HALL_Study[1].HallSector = 1;
+    HALL_Study[1].StudySectorCnt = 0;
+    HALL_Study[1].HallCommPWM = 4500;/*霍尔换向PWM值*/
+
+    HALL_Study[0].StudySectorCnt3 = 200;/*换向一次时间1代表2ms*/
+    HALL_Study[0].HallSector = 1;
+    HALL_Study[0].StudySectorCnt = 0;
+    HALL_Study[0].HallCommPWM = 4500;/*霍尔换向PWM值*/
+
+    HALL_Study[0].HallTab[0] = 6;
+    HALL_Study[0].HallTab[1] = 4;
+    HALL_Study[0].HallTab[2] = 5;
+    HALL_Study[0].HallTab[3] = 1;
+    HALL_Study[0].HallTab[4] = 3;
+    HALL_Study[0].HallTab[5] = 2;
+
+    HALL_Study[1].HallTab[0] = 6;// 546231
+    HALL_Study[1].HallTab[1] = 4;
+    HALL_Study[1].HallTab[2] = 5;
+    HALL_Study[1].HallTab[3] = 1;
+    HALL_Study[1].HallTab[4] = 3;
+    HALL_Study[1].HallTab[5] = 2;
+}
+/*------------------------------------------------
+Function:驱动器错误指示
+Input   :No
+Output  :No
+Explain :10ms运行一次
+------------------------------------------------*/
+void DisplayErrLed(void)
+{
+    u16 DispCounterTemp;
+    DisplayCounter++;
+//    u8 temparray1[NEED_TO_CURRPROJECT_MOTORNUM] = {0,1,2,3,4,5,6,9};//用于设置8路电机的报警指示
+//    for(u8 i = 0; i<NEED_TO_CURRPROJECT_MOTORNUM; i++)
+//    {
+//        if(MotorControl[temparray1[i]].Fault_Flag == 1)
+//        {
+//            MC_SetFault(OVER_CURRENT(temparray1[i]));
+//        }
+//				else if(MotorControl[temparray1[i]].Fault_Flag == 0)
+//				{
+//					 MC_ClearFault(OVER_CURRENT(temparray1[i]));
+//				}
+//    }
+    if(wGlobal_Flags==NO_ERROR)
+    {
+        FaultOccurred = wGlobal_Flags;
+        DispCounterTemp=16;
+        if(DisplayCounter<=10*DispCounterTemp)
+        {
+            GREEN_LED_ON;
+        }
+        else if(DisplayCounter<=11*DispCounterTemp)
+        {
+            GREEN_LED_OFF;
+        }
+        else
+        {
+            DisplayCounter = 0;
+        }
+        RED_LED1_OFF;
+        RED_LED2_OFF;
+    }
+    else
+    {
+        GREEN_LED_OFF;
+        switch (FaultOccurred)
+        {
+        case PUSH_MOTOR1_OVER_CUR: //推杆1闪烁1次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=2*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                    {
+                        RED_LED2_ON;
+                    }
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<4*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+
+            }
+            if(DisplayCounter>4*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case PUSH_MOTOR2_OVER_CUR: //推杆2闪烁2次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=4*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                    {
+                        RED_LED2_ON;
+                    }
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<6*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+
+            }
+            if(DisplayCounter>6*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case PUSH_MOTOR3_OVER_CUR: //推杆3闪烁3次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=6*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<6*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+
+            }
+            if(DisplayCounter>8*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case PUSH_MOTOR4_OVER_CUR: //推杆4闪烁4次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=8*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<8*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>10*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        case BLDC1_OVER_CUR: //BLDC5次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=10*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<10*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>12*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        case BLDC2_OVER_CUR: //上面6次
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=12*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<12*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>14*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        case ONEWYA_MOTOR1_OVER_CUR:
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=14*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<14*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>16*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        case ONEWYA_MOTOR2_OVER_CUR:
+            RED_LED1_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=16*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED2_ON;
+                    else
+                        RED_LED2_OFF;
+                }
+            }
+            else if(DisplayCounter<16*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>18*DispCounterTemp)
+                DisplayCounter=0;
+            break;
+
+        case HALL5_SENSOR_ERR:    //下面红灯
+            RED_LED2_OFF;
+            DispCounterTemp=40;
+            if(DisplayCounter<2*DispCounterTemp)
+            {
+                RED_LED1_ON;
+            }
+            else if(DisplayCounter<4*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+            }
+            if(DisplayCounter>6*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case HALL6_SENSOR_ERR:
+            RED_LED1_OFF;
+            DispCounterTemp=40;
+            if(DisplayCounter<2*DispCounterTemp)
+            {
+                RED_LED2_ON;
+            }
+            else if(DisplayCounter<4*DispCounterTemp)
+            {
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>6*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case CAN_COMMUNICATION_ERR:
+
+            DispCounterTemp=10;
+            if(DisplayCounter<2*DispCounterTemp)
+            {
+                RED_LED1_ON;
+                RED_LED2_ON;
+            }
+            else if(DisplayCounter<4*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+                RED_LED2_OFF;
+            }
+            if(DisplayCounter>6*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+        case OVER_VOLTAGE:  //两个灯常量
+            RED_LED1_ON;
+            RED_LED2_ON;
+            DisplayCounter=0;
+            break;
+        case UNDER_VOLTAGE:   //欠压下面红灯亮
+            RED_LED2_ON;
+            RED_LED1_OFF;
+            DisplayCounter=0;
+
+            break;
+        case MOTOR5_BREAK: 
+            RED_LED2_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=2*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                    {
+                        RED_LED1_ON;
+                    }
+                    else
+                        RED_LED1_OFF;
+                }
+            }
+            else if(DisplayCounter<4*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+
+            }
+            if(DisplayCounter>4*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case MOTOR6_BREAK: 
+            RED_LED2_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=4*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                    {
+                        RED_LED1_ON;
+                    }
+                    else
+                        RED_LED1_OFF;
+                }
+            }
+            else if(DisplayCounter<6*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+
+            }
+            if(DisplayCounter>6*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case BRAKE_3_4:
+            RED_LED2_OFF;
+            DispCounterTemp=16;
+            if(DisplayCounter<=6*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED1_ON;
+                    else
+                        RED_LED1_OFF;
+                }
+            }
+            else if(DisplayCounter<6*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+
+            }
+            if(DisplayCounter>8*DispCounterTemp)
+                DisplayCounter=0;
+
+            break;
+
+        case BRAKE_0_1_2_9: 
+            RED_LED2_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=8*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED1_ON;
+                    else
+                        RED_LED1_OFF;
+                }
+            }
+            else if(DisplayCounter<8*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+            }
+            if(DisplayCounter>10*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        case BRAKE10_11_12_13: 
+            RED_LED2_OFF;
+            DispCounterTemp=16;
+
+            if(DisplayCounter<=10*DispCounterTemp)
+            {
+                if((DisplayCounter-1)%DispCounterTemp==0)
+                {
+                    if((DisplayCounter/DispCounterTemp)%2==0)
+                        RED_LED1_ON;
+                    else
+                        RED_LED1_OFF;
+                }
+            }
+            else if(DisplayCounter<10*DispCounterTemp)
+            {
+                RED_LED1_OFF;
+            }
+            if(DisplayCounter>12*DispCounterTemp)
+                DisplayCounter=0;
+
+
+            break;
+        default:
+            RED_LED1_OFF;
+            RED_LED2_OFF;
+            break;
+        }
+    }
+
+}
+/*------------------------------------------------
+Function:推杆电机位置环
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+void Push_Motor_Location_Control(void)
+{
+    //			 Ramp_PPWM(1);
+//			 MotorControl[1].PWM_DutySet = -PID_Controller( MotorControl[1].Location_Set, MotorControl[1].Hall.HALL_CaptureValue,&PID_Location_InitStruct[1]);
+//			 SetMotorSpeed(1, MotorControl[1].PWM_DutySet);
+    if(MotorControl[0].Hall.HALL_CaptureValue > MotorControl[0].Location_Set)// && fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) > 5)
+    {
+        MotorControl[0].PWM_DutySet = PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[0].Hall.HALL_CaptureValue < MotorControl[0].Location_Set)// && fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) > 5)
+    {
+        MotorControl[0].PWM_DutySet = -PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[0].Hall.HALL_CaptureValue == MotorControl[0].Location_Set)//||fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) < 5)
+    {
+        MotorControl[0].PWM_DutySet = 0;
+    }
+    if(MotorControl[1].Hall.HALL_CaptureValue > MotorControl[1].Location_Set)// && fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) > 5)
+    {
+        MotorControl[1].PWM_DutySet = PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[1].Hall.HALL_CaptureValue < MotorControl[1].Location_Set)// && fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) > 5)
+    {
+        MotorControl[1].PWM_DutySet = -PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[1].Hall.HALL_CaptureValue == MotorControl[1].Location_Set)//||fabs(MotorControl[1].Hall.HALL_CaptureValue- MotorControl[1].Location_Set) < 5)
+    {
+        MotorControl[1].PWM_DutySet = 0;
+    }
+
+    if(MotorControl[2].Hall.HALL_CaptureValue > MotorControl[2].Location_Set)// && fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) > 5)
+    {
+        MotorControl[2].PWM_DutySet = PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[2].Hall.HALL_CaptureValue < MotorControl[2].Location_Set)// && fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) > 5)
+    {
+        MotorControl[2].PWM_DutySet = -PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[2].Hall.HALL_CaptureValue == MotorControl[2].Location_Set)//||fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) < 5)
+    {
+        MotorControl[2].PWM_DutySet = 0;
+    }
+
+    if(MotorControl[9].Hall.HALL_CaptureValue > MotorControl[9].Location_Set)// && fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) > 5)
+    {
+        MotorControl[9].PWM_DutySet = PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[9].Hall.HALL_CaptureValue < MotorControl[9].Location_Set)// && fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) > 5)
+    {
+        MotorControl[9].PWM_DutySet = -PERCENT_95_OF_PWM_PERIOD;
+    }
+    else if(MotorControl[9].Hall.HALL_CaptureValue == MotorControl[9].Location_Set)//||fabs(MotorControl[2].Hall.HALL_CaptureValue- MotorControl[2].Location_Set) < 5)
+    {
+        MotorControl[9].PWM_DutySet = 0;
+    }
+}
+/*------------------------------------------------
+Function:推杆电机标定
+Input   :No
+Output  :No
+Explain :No
+------------------------------------------------*/
+uint32_t Sys_Ticktemp = 0;
+void Push_Motor_Calibrate(void)
+{
+    if(Push_motor_calibrationFLAG == 1)    //每次标定完毕会将该标志位置0
+    {
+        if(Push_Location_model ==1)      //每次标定完毕会将该标志位置1
+        {
+            MotorControl[0].Motor_Start_Stop = 0; //确保推杆在标定时为使能和PWM为0
+            MotorControl[1].Motor_Start_Stop = 0;
+            MotorControl[2].Motor_Start_Stop = 0;
+            MotorControl[9].Motor_Start_Stop = 0;
+            MotorControl[0].PWM_Duty = 0;
+            MotorControl[1].PWM_Duty = 0;
+            MotorControl[2].PWM_Duty = 0;
+            MotorControl[9].PWM_Duty = 0;
+            Sys_Ticktemp  = HAL_GetTick(); //确保相对时间
+            Push_Location_model = 0;
+        }
+        MotorControl[0].PWM_Duty+=10;
+        MotorControl[1].PWM_Duty-=10;
+        MotorControl[2].PWM_Duty-=10;
+        MotorControl[9].PWM_Duty+=10;
+        if(MotorControl[0].PWM_Duty > PERCENT_95_OF_PWM_PERIOD)  MotorControl[0].PWM_Duty = PERCENT_95_OF_PWM_PERIOD;
+        if(MotorControl[1].PWM_Duty < -PERCENT_95_OF_PWM_PERIOD)  MotorControl[1].PWM_Duty = -PERCENT_95_OF_PWM_PERIOD;
+        if(MotorControl[2].PWM_Duty < -PERCENT_95_OF_PWM_PERIOD)  MotorControl[2].PWM_Duty = -PERCENT_95_OF_PWM_PERIOD;
+        if(MotorControl[9].PWM_Duty > PERCENT_95_OF_PWM_PERIOD)  MotorControl[9].PWM_Duty = PERCENT_95_OF_PWM_PERIOD;
+        MOTOR0CW();
+        MOTOR1CCW();
+        MOTOR2CCW();
+        MOTOR9CW();
+
+        if(HAL_GetTick()%1000 == 0)
+        {
+            MotorControl[0].Hall.HALL_PreCaptureValue = MotorControl[0].Hall.HALL_CaptureValue ;
+            MotorControl[1].Hall.HALL_PreCaptureValue = MotorControl[1].Hall.HALL_CaptureValue ;
+            MotorControl[2].Hall.HALL_PreCaptureValue = MotorControl[2].Hall.HALL_CaptureValue ;
+            MotorControl[9].Hall.HALL_PreCaptureValue = MotorControl[9].Hall.HALL_CaptureValue ;
+        }
+
+        if((HAL_GetTick() > Sys_Ticktemp + 16000 )&&
+                MotorControl[0].Hall.HALL_PreCaptureValue == MotorControl[0].Hall.HALL_CaptureValue &&
+                MotorControl[1].Hall.HALL_PreCaptureValue == MotorControl[1].Hall.HALL_CaptureValue &&
+                MotorControl[2].Hall.HALL_PreCaptureValue == MotorControl[2].Hall.HALL_CaptureValue &&
+                MotorControl[9].Hall.HALL_PreCaptureValue == MotorControl[9].Hall.HALL_CaptureValue &&
+                MotorControl[0].Fault_Flag ==0&&
+                MotorControl[1].Fault_Flag ==0&&
+                MotorControl[2].Fault_Flag ==0&&
+                MotorControl[9].Fault_Flag ==0) //如果时间到，计数值没有改变，电机没有过流，
+        {
+
+            MOTOR0STOP();
+            MOTOR1STOP();
+            MOTOR2STOP();
+            MOTOR9STOP();
+            MotorControl[0].PWM_Duty = 0;
+            MotorControl[0].Hall.HALL_PreCaptureValue = 0;
+            MotorControl[0].Hall.HALL_CaptureValue = 0;
+            MotorControl[1].PWM_Duty = 0;
+            MotorControl[1].Hall.HALL_PreCaptureValue = 0;
+            MotorControl[1].Hall.HALL_CaptureValue = 0;
+            MotorControl[2].PWM_Duty = 0;
+            MotorControl[2].Hall.HALL_PreCaptureValue = 0;
+            MotorControl[2].Hall.HALL_CaptureValue = 0;
+            MotorControl[9].PWM_Duty = 0;
+            MotorControl[9].Hall.HALL_PreCaptureValue = 0;
+            MotorControl[9].Hall.HALL_CaptureValue = 0;
+
+            Push_motor_calibrationFLAG = 0;
+            Push_Location_model = 1; //开启推杆位置环
+
+        }
+    }
+}
+/*******************************************************************************
+* Function Name  : MCL_ClearFault()
+* Description    : This function check if the fault source is over. In case it
+*                  is, it clears the related flag and return true. Otherwise it
+*                  returns FALSE
+* Input          : Fault type
+* Output         : None
+* Return         : None
+*******************************************************************************/
+//u8 temparray[NEED_TO_CURRPROJECT_MOTORNUM] = {0,1,2,3,4,5,6,9};//用于清除8路电机的报警指示
+void MotorClearFault(void)
+{
+    /*判断是否需要清除8路过流错误*/
+
+//    for(u8 i = 0; i<NEED_TO_CURRPROJECT_MOTORNUM; i++)
+//    {
+//        if(MotorControl[temparray[i]].Fault_Flag == 0)
+//        {
+//            MC_ClearFault(OVER_CURRENT(temparray[i]));
+//        }
+//    }
+//		if()
+
+//  if (TB_Delay_IsElapsed())
+//  {
+//    if ((wGlobal_Flags & PFC_UNDER_VOLTAGE_POWER_ON) == PFC_UNDER_VOLTAGE_POWER_ON)
+//    {//PFC_UNDER_VOLTAGE_POWER_ON 上电时欠压保护，若电压恢复，清零保护
+//      if(!pfc_vol_under_num)
+//        {
+//          wGlobal_Flags &= ~PFC_UNDER_VOLTAGE_POWER_ON;
+//          VoltUnder_num = 0;
+//          Clr_FAULT = 1;
+//          err_code = 0;
+//        }
+//    }
+//
+//    if ((wGlobal_Flags & PFC_OVER_VOLTAGE_POWER_ON) == PFC_OVER_VOLTAGE_POWER_ON)
+//    {//PFC_OVER_VOLTAGE_POWER_ON 上电时过压保护，若电压恢复，清零保护
+//      if(!pfc_vol_over_num)
+//        {
+//          wGlobal_Flags &= ~PFC_OVER_VOLTAGE_POWER_ON;
+//          VoltUnder_num = 0;
+//          Clr_FAULT = 1;
+//          err_code = 0;
+//        }
+//    }
+//
+//    if ((wGlobal_Flags & PFC_UNDER_VOLTAGE_AFTER_POWER_ON) == PFC_UNDER_VOLTAGE_AFTER_POWER_ON)
+//    {//欠压状态恢复，清零保护
+//      if(!pfc_vol_under_num)
+//        {
+//          wGlobal_Flags &= ~PFC_UNDER_VOLTAGE_AFTER_POWER_ON;
+//          VoltUnder_num = 0;
+//          Clr_FAULT = 1;
+//          err_code = 0;
+//        }
+//    }
+//
+//    if ((wGlobal_Flags & PFC_OVER_VOLTAGE_AFTER_POWER_ON) == PFC_OVER_VOLTAGE_AFTER_POWER_ON)
+//    {//过压状态恢复，清零保护
+//      if(!pfc_vol_over_num)
+//        {
+//          wGlobal_Flags &= ~PFC_OVER_VOLTAGE_AFTER_POWER_ON;
+//          VoltOver_num = 0;
+//          Clr_FAULT = 1;
+//          err_code = 0;
+//        }
+//    }
+//    if (wGlobal_Flags & (IPM_OVERHEAT_ERR | IPM_CURRENT_ERR))
+//    {//若过流保护超过5次则需掉电清零保护
+//      if(OverCurrent_number < (IPM_TIME_ONCE * IPM_TIME_LONG))
+//        {
+//          if (GPIO_ReadInputDataBit(BRK_GPIO, BRK_PIN))
+//            {
+//              wGlobal_Flags &= ~(IPM_OVERHEAT_ERR|IPM_CURRENT_ERR);
+//              Clr_FAULT = 1;
+//            }
+//        }
+//    }
+//    if (wGlobal_Flags & SPEED_FEEDBACK)
+//    {//若motor_lock保护超过6次则需掉电清零保护
+//      if(motor_lock_number < 6)
+//        {
+//           wGlobal_Flags &= ~SPEED_FEEDBACK;
+//           low_speed_tmr = 0;
+//           Clr_FAULT = 1;
+//        }
+//    }
+//    if (wGlobal_Flags & POWER_DOWN)
+//    {//掉电保护状态恢复，清零保护
+//      if(!ac_power_down_num)
+//        {
+//           wGlobal_Flags &= ~POWER_DOWN;
+//           low_speed_tmr = 0;
+//           Clr_FAULT = 1;
+//           err_code = 0;
+//        }
+//    }
+//
+//  }
+//
+//  if(Clr_FAULT)
+//  {//清零保护
+//    Clr_FAULT = 0;
+//    if (!(wGlobal_Flags & ~(u64)0x03))
+//    {
+//      return(TRUE);
+//    }
+//    else
+//    {
+//      return(FALSE);
+//    }
+//  }
+//  else
+//  {
+//    return(FALSE);
+//  }
+//}
+}
