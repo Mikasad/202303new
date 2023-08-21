@@ -1,0 +1,268 @@
+// version: 1.5.4
+
+syntax = "proto2";
+
+message HeaderMessage {
+  required uint32 id = 1;
+}
+
+message UInt32Pair {
+  required uint32 key = 1;
+  required uint32 value = 2;
+}
+
+message VerifyMessage {
+  required uint32 id = 1;
+  required uint32 data = 2;
+}
+
+message ShutdownCommand {
+  required uint32 id = 1;
+  required uint32 type = 2;
+}
+
+message ConfigCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair config = 2;
+}
+
+message DriverConfigCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair config = 2;
+}
+
+message MotionControlMotorCommand {
+  required uint32 id = 1;
+  message MotorCommandPair {
+    required uint32 id = 1;
+    required int32 command = 2;
+  }
+  repeated MotorCommandPair command = 2;
+}
+
+message DeviceCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair command = 2;
+}
+
+message ManualModeDeviceCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair command = 2;
+}
+
+message RemoteCommand433 {
+  required uint32 id = 1;
+  required bytes command = 2;
+}
+
+message ClearErrorCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair bits = 2;
+}
+
+message SaveMotorDriverConfigCommand {
+  required uint32 id = 1;
+}
+
+message MotorDriverConfigCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair config = 2;
+}
+
+message MCUUpgradeCommand {
+  required uint32 id = 1;
+  required int32 time = 2;
+  required uint32 num = 3;
+  required uint32 check_code = 4;
+  repeated bytes command = 5;
+}
+
+message CameraPTZCommand {
+  required uint32 id = 1;
+  required uint32 command_id = 2;
+  required uint32 data_1 = 3;
+  required uint32 data_2 = 4;
+}
+
+message MCUUpgradeStatusData {
+  required uint32 id = 1;
+  required uint32 status = 2;
+}
+
+message VersionData {
+  required uint32 id = 1;
+  message VersionStruct {
+    required uint32 board = 1;
+    required uint32 type  = 2;
+    required uint32 major = 3;
+    required uint32 minor = 4;
+    required uint32 build = 5;
+  }
+  repeated VersionStruct version = 2;
+}
+
+message HealthData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message DeviceData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message OdometryData {
+  required uint32 id = 1;
+  required int32 left_count = 2;
+  required int32 right_count = 3;
+  required int32 left_delta_count = 4;
+  required int32 right_delta_count = 5;
+}
+
+message IMUData {
+  required uint32 id                   = 1;
+  required int32 roll                  = 2;
+  required int32 pitch                 = 3;
+  required int32 yaw                   = 4;
+  optional int32 angular_velocity_x    = 5;
+  optional int32 angular_velocity_y    = 6;
+  optional int32 angular_velocity_z    = 7;
+  optional int32 linear_acceleration_x = 8;
+  optional int32 linear_acceleration_y = 9;
+  optional int32 linear_acceleration_z = 10;
+  optional int32 magnetic_field_x      = 11;
+  optional int32 magnetic_field_y      = 12;
+  optional int32 magnetic_field_z      = 13;
+}
+
+message SaberIMUData {
+  required uint32 id    = 1;
+  required uint32 acc_x  = 2;
+  required uint32 acc_y  = 3;
+  required uint32 acc_z  = 4;
+  required uint32 gyro_x = 5;
+  required uint32 gyro_y = 6;
+  required uint32 gyro_z = 7;
+  required uint32 roll   = 8;
+  required uint32 pitch  = 9;
+  required uint32 yaw    = 10;
+}
+
+message UltrasonicData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message ProtectorData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message AnalogAntiCollisionData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+  repeated UInt32Pair trigger_data = 3;
+}
+
+message AntiDropData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+  repeated UInt32Pair trigger_data = 3; 
+}
+
+message UWBData {
+  required uint32 id = 1;
+  required uint32 x = 2;
+  required uint32 y = 3;
+  required uint32 z = 4;
+}
+
+message UWBDistanceData {
+  message UWBDistanceStruct {
+    required uint32 id = 1;
+    required uint32 data = 2;
+  }
+  required uint32 id = 1;
+  required uint32 tag_num = 2;
+  repeated UWBDistanceStruct data = 3;
+}
+
+message RFIDData {
+  message RFIDStruct {
+    required uint32 id = 1;
+    required uint32 data = 2;
+    required uint32 strength = 3;
+  }
+  required uint32 id = 1;
+  repeated RFIDStruct data = 2;
+}
+
+message RemoteData433 {
+  required uint32 id = 1;
+  required bytes data = 2;
+}
+
+message MotorDriverConfigData {
+  required uint32 id = 1;
+  repeated UInt32Pair config = 2;
+}
+
+message HardwareDriverData {
+  required uint32 id = 1; 
+  repeated UInt32Pair data = 2;
+}
+
+message OdomRecorderData {
+  required uint32 id = 1;
+  required uint32 odom_x = 2;
+  required uint32 odom_y = 3;
+  required uint32 odom_w = 4;
+  required uint32 dx = 5;
+  required uint32 x = 6;
+  required uint32 y = 7;
+  required uint32 w = 8;
+}
+
+message MCUDebugData {
+  required uint32 id = 1;
+  repeated uint32 data = 2;
+} 
+
+message BatteryData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message ShaoTestData {
+  required uint32 id = 1;
+  required int32 angular_velocity = 2;
+  required int32 linear_velocity = 3;
+}
+
+message MotionPositionCammand {
+  required uint32 id = 1;
+  required int32 left_position = 2;
+  required int32 right_position = 3;
+  required int32 brake_cmd = 4;
+}
+
+message OtherDeviceData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}
+
+message HaideDeviceCommand {
+  required uint32 id = 1;
+  repeated UInt32Pair command = 2;
+}
+
+message HaideMotionData {
+  required uint32 id   = 1;
+  required int32 speed = 2;
+  required int32 angle = 3;
+}
+
+message HaideDeviceData {
+  required uint32 id = 1;
+  repeated UInt32Pair data = 2;
+}

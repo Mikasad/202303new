@@ -1,0 +1,3 @@
+/MDK-ARM/Objects/
+App/nanopb/protocol_config.h*.TMP
+.vscode
